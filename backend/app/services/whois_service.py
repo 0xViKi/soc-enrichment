@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 import whois
@@ -15,8 +15,16 @@ def _parse_date(value: Any) -> Optional[datetime]:
 def _compute_domain_age_days(created: Optional[datetime]) -> Optional[int]:
     if not created:
         return None
+
+    # Normalize created to naive UTC
+    if created.tzinfo is not None:
+        created_utc = created.astimezone(timezone.utc).replace(tzinfo=None)
+    else:
+        created_utc = created
+
+    # Use naive UTC "now" to match
     now = datetime.utcnow()
-    delta = now - created
+    delta = now - created_utc
     return delta.days
 
 

@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     URLSCAN_API_KEY: str | None = None 
     VIRUSTOTAL_API_KEY: str | None = None 
 
+    # Open Source EML Analyzer Endpoint
+    EML_ANALYZER_URL: str = "https://eml-analyzer.herokuapp.com/api/analyze/file"
+
+    # Internal API base (for self-calls from email → enrichment)
+    INTERNAL_API_BASE_URL: str = "http://localhost:8000/api/v1"
+
 
     class Config:
         env_file = ".env"
