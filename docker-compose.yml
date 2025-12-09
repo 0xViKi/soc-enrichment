@@ -1,0 +1,56 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: soc-backend
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    networks:
+      - soc-net
+
+  db:
+    image: postgres:16
+    container_name: soc-db
+    environment:
+      POSTGRES_DB: soc_enrich
+      POSTGRES_USER: soc_user
+      POSTGRES_PASSWORD: soc_password
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - soc-net
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: soc-n8n
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=false
+      - N8N_HOST=n8n
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - GENERIC_TIMEZONE=Australia/Melbourne
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - soc-net
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
+  n8n_data:
+
+networks:
+  soc-net:
+    driver: bridge
