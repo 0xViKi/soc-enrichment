@@ -1,24 +1,28 @@
 # backend/app/schemas/email_analysis.py
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
+
+# ================================================================
+# EMAIL HEADER SCHEMA
+# ================================================================
 
 class EmailHeader(BaseModel):
     message_id: Optional[str] = Field(None, alias="messageId")
-    subject: Optional[str]
+    subject: Optional[str] = None
 
     # Sender fields
     from_addr: Optional[str] = Field(None, alias="from")
-    sender_name: Optional[str] = None   # Display name
+    sender_name: Optional[str] = None
     reply_to: Optional[str] = None
     return_path: Optional[str] = Field(None, alias="returnPath")
 
-    # Recipient fields
-    to: List[str] = []
-    cc: Optional[List[str]] = None
+    # Recipients
+    to: List[str] = Field(default_factory=list)
+    cc: List[str] = Field(default_factory=list)
 
     # Date
-    date: Optional[str]
+    date: Optional[str] = None
 
     # Authentication results
     spf_result: Optional[str] = Field(None, alias="spfResult")
@@ -26,21 +30,36 @@ class EmailHeader(BaseModel):
     dmarc_result: Optional[str] = Field(None, alias="dmarcResult")
     authentication_results: Optional[str] = Field(None, alias="authResults")
 
-    # IP & routing metadata
+    # Routing / IP metadata
     received_domains: List[str] = Field(default_factory=list, alias="receivedDomain")
     received_ips: List[str] = Field(default_factory=list, alias="receivedIp")
     originating_ip: Optional[str] = Field(None, alias="originatingIp")
 
-    # Mail client metadata
+    # Mail software
     x_mailer: Optional[str] = Field(None, alias="xMailer")
     user_agent: Optional[str] = Field(None, alias="userAgent")
 
+    # FIX: Convert null → []
+    @field_validator("cc", "received_domains", "received_ips", mode="before")
+    def convert_null_to_list(cls, v):
+        if v is None:
+            return []
+        return v
+
+
+# ================================================================
+# EMAIL BODY SCHEMA
+# ================================================================
 
 class EmailBody(BaseModel):
     content_type: str = Field(..., alias="contentType")
     hash: Optional[str] = None
     content: Optional[str] = None
 
+
+# ================================================================
+# ATTACHMENTS
+# ================================================================
 
 class AttachmentHashSet(BaseModel):
     md5: Optional[str] = None
@@ -58,6 +77,10 @@ class EmailAttachment(BaseModel):
     hashes: Optional[AttachmentHashSet] = Field(None, alias="hash")
 
 
+# ================================================================
+# VERDICTS
+# ================================================================
+
 class VerdictDetail(BaseModel):
     key: str
     score: Optional[float] = None
@@ -69,55 +92,61 @@ class EngineVerdict(BaseModel):
     name: str
     malicious: bool
     score: Optional[float] = None
-    details: List[VerdictDetail] = []
+    details: List[VerdictDetail] = Field(default_factory=list)
 
+
+# ================================================================
+# RISK SCORE
+# ================================================================
 
 class EmailRiskScore(BaseModel):
-    score: int        # 0–100
-    level: str        # "low" | "medium" | "high"
+    score: int          # 0–100
+    level: str          # "low" | "medium" | "high" | "critical"
     reasons: List[str]
 
 
+# ================================================================
+# IOC BUNDLE
+# ================================================================
+
 class EmailIOCBundle(BaseModel):
-    attachment_hashes: List[AttachmentHashSet]
-    sender_domain: Optional[str]
-    sender_email: Optional[str]
-    received_ips: List[str]
-    received_domains: List[str]
+    attachment_hashes: List[AttachmentHashSet] = Field(default_factory=list)
+    sender_domain: Optional[str] = None
+    sender_email: Optional[str] = None
+    received_ips: List[str] = Field(default_factory=list)
+    received_domains: List[str] = Field(default_factory=list)
 
 
-class EmailAnalysisResponse(BaseModel):
-    header: EmailHeader
-    bodies: List[EmailBody]
-    attachments: List[EmailAttachment]
-    verdicts: List[EngineVerdict]
-    risk: EmailRiskScore
-    iocs: EmailIOCBundle
-    raw: Dict[str, Any]  # full raw response from Heroku, for debugging
+# ================================================================
+# ENRICHMENT STRUCTURES
+# ================================================================
 
 class EnrichedAttachment(BaseModel):
     hash_value: str
     hashes: AttachmentHashSet
-    enrichment: Dict[str, Any] | None = None  # JSON from /enrich/hash
+    enrichment: Optional[Dict[str, Any]] = None
 
 
 class EnrichedDomain(BaseModel):
     domain: str
-    enrichment: Dict[str, Any] | None = None  # JSON from /enrich/domain
+    enrichment: Optional[Dict[str, Any]] = None
 
 
 class EnrichedIP(BaseModel):
     ip: str
-    enrichment: Dict[str, Any] | None = None  # JSON from /enrich/ip
+    enrichment: Optional[Dict[str, Any]] = None
 
 
 class EmailEnrichmentBundle(BaseModel):
-    attachments: List[EnrichedAttachment] = []
-    domains: List[EnrichedDomain] = []
-    ips: List[EnrichedIP] = []
+    attachments: List[EnrichedAttachment] = Field(default_factory=list)
+    domains: List[EnrichedDomain] = Field(default_factory=list)
+    ips: List[EnrichedIP] = Field(default_factory=list)
 
 
-# Update EmailAnalysisResponse to include enrichment
+# ================================================================
+# FINAL RESPONSE MODEL (ONLY ONE VERSION)
+# ================================================================
+
 class EmailAnalysisResponse(BaseModel):
     header: EmailHeader
     bodies: List[EmailBody]
@@ -125,5 +154,5 @@ class EmailAnalysisResponse(BaseModel):
     verdicts: List[EngineVerdict]
     risk: EmailRiskScore
     iocs: EmailIOCBundle
-    enrichment: EmailEnrichmentBundle  # <--- add this line
+    enrichment: EmailEnrichmentBundle
     raw: Dict[str, Any]
