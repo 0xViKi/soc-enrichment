@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>
+    {% if header.subject %}Phishing Investigation – {{ header.subject }}{% else %}Phishing Investigation Report{% endif %}
+  </title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #020617;
+      --bg-elevated: #020617;
+      --card-bg: #020617;
+      --card-border: #1e293b;
+      --accent: #38bdf8;
+      --accent-soft: rgba(56, 189, 248, 0.15);
+      --accent-strong: #0ea5e9;
+      --text-main: #e5e7eb;
+      --text-muted: #9ca3af;
+      --danger: #f97373;
+      --danger-soft: rgba(248, 113, 113, 0.14);
+      --warning: #facc15;
+      --warning-soft: rgba(250, 204, 21, 0.14);
+      --ok: #4ade80;
+      --ok-soft: rgba(74, 222, 128, 0.12);
+      --border-radius-lg: 18px;
+      --border-radius-md: 12px;
+      --border-radius-pill: 999px;
+      --shadow-soft: 0 18px 40px rgba(15, 23, 42, 0.7);
+      --shadow-subtle: 0 10px 30px rgba(15, 23, 42, 0.5);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: radial-gradient(circle at top, #020617 0, #020617 45%, #000 100%);
+      color: var(--text-main);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        "Segoe UI", sans-serif;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    body {
+      padding: 32px 16px;
+    }
+
+    .page {
+      max-width: 1120px;
+      margin: 0 auto;
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.98));
+      border-radius: 24px;
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      box-shadow: var(--shadow-soft);
+      overflow: hidden;
+    }
+
+    header.report-header {
+      padding: 20px 24px 16px 24px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.12), transparent 55%);
+    }
+
+    .report-title-block {
+      flex: 1 1 260px;
+      min-width: 0;
+    }
+
+    .report-eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 4px;
+    }
+
+    .report-title {
+      font-size: 20px;
+      font-weight: 650;
+      margin: 0;
+      color: #f9fafb;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .report-meta-line {
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .report-meta-line span + span::before {
+      content: "•";
+      margin: 0 8px;
+      color: rgba(148, 163, 184, 0.6);
+    }
+
+    .risk-chip-block {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding-left: 12px;
+    }
+
+    .risk-chip {
+      min-width: 130px;
+      padding: 8px 16px;
+      border-radius: var(--border-radius-pill);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: radial-gradient(circle at top, rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.96));
+    }
+
+    .risk-chip-high {
+      border-color: rgba(248, 113, 113, 0.7);
+      background: linear-gradient(135deg, rgba(127, 29, 29, 0.96), rgba(185, 28, 28, 0.98));
+    }
+
+    .risk-chip-medium {
+      border-color: rgba(250, 204, 21, 0.7);
+      background: linear-gradient(135deg, rgba(113, 63, 18, 0.96), rgba(161, 98, 7, 0.98));
+    }
+
+    .risk-chip-low {
+      border-color: rgba(45, 212, 191, 0.7);
+      background: linear-gradient(135deg, rgba(6, 95, 70, 0.96), rgba(5, 150, 105, 0.98));
+    }
+
+    .risk-chip-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: rgba(226, 232, 240, 0.85);
+    }
+
+    .risk-chip-score {
+      font-size: 17px;
+      font-weight: 650;
+      color: #f9fafb;
+    }
+
+    .risk-chip-score span {
+      font-size: 12px;
+      font-weight: 500;
+      opacity: 0.75;
+      margin-left: 4px;
+    }
+
+    .risk-chip-level {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: rgba(226, 232, 240, 0.85);
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: var(--border-radius-pill);
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      font-size: 11px;
+      color: var(--text-muted);
+      gap: 6px;
+    }
+
+    .tag-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.9);
+    }
+
+    main {
+      padding: 20px 24px 22px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .layout-grid {
+      display: grid;
+      grid-template-columns: 2.15fr 1.25fr;
+      gap: 14px;
+    }
+
+    @media (max-width: 900px) {
+      .layout-grid {
+        grid-template-columns: 1fr;
+      }
+      header.report-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .risk-chip-block {
+        padding-left: 0;
+      }
+    }
+
+    section.card {
+      border-radius: var(--border-radius-lg);
+      border: 1px solid var(--card-border);
+      background: radial-gradient(circle at top left, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.98));
+      box-shadow: var(--shadow-subtle);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .card-header {
+      padding: 10px 14px 8px 14px;
+      border-bottom: 1px solid rgba(30, 64, 175, 0.5);
+      background: radial-gradient(circle at top left, rgba(30, 64, 175, 0.4), rgba(15, 23, 42, 0.95));
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .card-header h2 {
+      font-size: 14px;
+      font-weight: 600;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-header h2::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.9);
+    }
+
+    .card-header-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .card-body {
+      padding: 10px 14px 12px 14px;
+      min-width: 0;
+    }
+
+    .card-body-tight {
+      padding-top: 8px;
+      padding-bottom: 8px;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px 16px;
+      font-size: 12px;
+    }
+
+    @media (max-width: 700px) {
+      .meta-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+    }
+
+    .value {
+      font-size: 12px;
+      color: #e5e7eb;
+      word-break: break-word;
+    }
+
+    .mono {
+      font-family: ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono",
+        "Courier New", monospace;
+      font-size: 11px;
+      word-break: break-all;
+    }
+
+    .small {
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .muted {
+      color: var(--text-muted);
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 8px;
+      font-size: 11px;
+      border-radius: var(--border-radius-pill);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      color: var(--text-muted);
+      gap: 6px;
+    }
+
+    .pill-badge {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.8);
+    }
+
+    .pill-danger {
+      border-color: rgba(248, 113, 113, 0.7);
+      color: #fecaca;
+    }
+
+    .pill-danger .pill-badge {
+      background: var(--danger);
+      box-shadow: 0 0 10px rgba(248, 113, 113, 0.9);
+    }
+
+    .pill-warning {
+      border-color: rgba(250, 204, 21, 0.7);
+      color: #fef3c7;
+    }
+
+    .pill-warning .pill-badge {
+      background: var(--warning);
+      box-shadow: 0 0 10px rgba(250, 204, 21, 0.9);
+    }
+
+    .pill-ok {
+      border-color: rgba(45, 212, 191, 0.7);
+      color: #ccfbf1;
+    }
+
+    .pill-ok .pill-badge {
+      background: var(--ok);
+      box-shadow: 0 0 10px rgba(45, 212, 191, 0.9);
+    }
+
+    .risk-reasons {
+      margin-top: 6px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      background: radial-gradient(circle at top left, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.99));
+      border: 1px dashed rgba(148, 163, 184, 0.4);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .risk-reasons ul {
+      margin: 4px 0 0 14px;
+      padding: 0;
+    }
+
+    .risk-reasons li {
+      margin-bottom: 2px;
+    }
+
+    .risk-meter-container {
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .risk-meter-bar {
+      position: relative;
+      margin-top: 4px;
+      width: 100%;
+      height: 8px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--ok-soft), var(--warning-soft), var(--danger-soft));
+      overflow: hidden;
+    }
+
+    .risk-meter-value {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #22c55e, #fde047, #f97373);
+      box-shadow: 0 0 12px rgba(248, 113, 113, 0.8);
+    }
+
+    .chips-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .chip {
+      padding: 4px 9px;
+      border-radius: var(--border-radius-pill);
+      font-size: 11px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .chip-urgent {
+      border-color: rgba(248, 113, 113, 0.7);
+      color: #fecaca;
+    }
+
+    .chip-domain-mismatch {
+      border-color: rgba(250, 204, 21, 0.7);
+      color: #fef3c7;
+    }
+
+    .chip-spam {
+      border-color: rgba(96, 165, 250, 0.8);
+      color: #bfdbfe;
+    }
+
+    .body-preview {
+      max-height: 220px;
+      overflow: auto;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid rgba(30, 64, 175, 0.4);
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .body-preview + .small {
+      margin-top: 6px;
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+
+    .table th,
+    .table td {
+      padding: 5px 6px;
+      border-bottom: 1px solid rgba(30, 64, 175, 0.4);
+      vertical-align: top;
+    }
+
+    .table th {
+      text-align: left;
+      font-weight: 600;
+      color: rgba(209, 213, 219, 0.9);
+      white-space: nowrap;
+    }
+
+    .table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .table.compact th,
+    .table.compact td {
+      padding: 4px 5px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 7px;
+      border-radius: var(--border-radius-pill);
+      font-size: 10px;
+      font-weight: 500;
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .badge-low {
+      border-color: rgba(45, 212, 191, 0.7);
+      background: var(--ok-soft);
+      color: #bbf7d0;
+    }
+
+    .badge-medium {
+      border-color: rgba(250, 204, 21, 0.8);
+      background: var(--warning-soft);
+      color: #fef3c7;
+    }
+
+    .badge-high {
+      border-color: rgba(248, 113, 113, 0.85);
+      background: var(--danger-soft);
+      color: #fecaca;
+    }
+
+    .badge-critical {
+      border-color: rgba(248, 113, 113, 0.95);
+      background: linear-gradient(135deg, rgba(127, 29, 29, 0.96), rgba(248, 113, 113, 0.12));
+      color: #fee2e2;
+      box-shadow: 0 0 12px rgba(248, 113, 113, 0.8);
+    }
+
+    .badge-muted {
+      background: rgba(15, 23, 42, 0.9);
+      border-color: rgba(148, 163, 184, 0.3);
+      color: var(--text-muted);
+    }
+
+    .hint {
+      margin-top: 3px;
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    .infra-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    @media (max-width: 900px) {
+      .infra-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 11px;
+    }
+
+    .timeline-item {
+      display: grid;
+      grid-template-columns: minmax(0, 110px) 1fr;
+      gap: 6px;
+      align-items: start;
+    }
+
+    .timeline-label {
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-muted);
+      font-size: 10px;
+    }
+
+    .timeline-content {
+      position: relative;
+      padding-left: 14px;
+    }
+
+    .timeline-dot {
+      position: absolute;
+      left: 0;
+      top: 4px;
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.9);
+    }
+
+    .timeline-title {
+      font-size: 11px;
+      font-weight: 500;
+      color: #e5e7eb;
+    }
+
+    .timeline-meta {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .footer-meta {
+      padding: 0 24px 12px 24px;
+      font-size: 10px;
+      color: var(--text-muted);
+      text-align: right;
+    }
+
+    .footer-meta span {
+      opacity: 0.8;
+    }
+
+  </style>
+</head>
+<body>
+<div class="page">
+  <header class="report-header">
+    <div class="report-title-block">
+      <div class="report-eyebrow">Phishing / Email Investigation Report</div>
+      <h1 class="report-title">
+        {{ header.subject or "No subject" }}
+      </h1>
+      <div class="report-meta-line">
+        <span>From: {{ header.from_addr or "unknown" }}</span>
+        {% if header.date %}
+          <span>{{ header.date }}</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="risk-chip-block">
+      {% set level = risk.level or "low" %}
+      {% set chip_class = "risk-chip" %}
+      {% if level == "high" %}
+        {% set chip_class = chip_class + " risk-chip-high" %}
+      {% elif level == "medium" %}
+        {% set chip_class = chip_class + " risk-chip-medium" %}
+      {% else %}
+        {% set chip_class = chip_class + " risk-chip-low" %}
+      {% endif %}
+      <div class="{{ chip_class }}">
+        <div>
+          <div class="risk-chip-label">Overall Email Risk</div>
+          <div class="risk-chip-score">
+            {{ risk.score }}/100 <span>{{ level|upper }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="tag">
+        <span class="tag-dot"></span>
+        <span>Generated {{ meta.generated_at if meta and meta.generated_at is defined else "N/A" }}</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="layout-grid">
+      <!-- LEFT COLUMN -->
+      <div class="left-column">
+        <!-- Email Overview -->
+        <section class="card">
+          <div class="card-header">
+            <h2>Email Overview</h2>
+            <div class="card-header-sub">Core header fields from .eml</div>
+          </div>
+          <div class="card-body card-body-tight">
+            <div class="meta-grid">
+              <div>
+                <div class="label">From</div>
+                <div class="value mono">{{ header.from_addr or "N/A" }}</div>
+              </div>
+              <div>
+                <div class="label">To</div>
+                <div class="value mono">
+                  {% if header.to_addrs %}
+                    {{ header.to_addrs | join(", ") }}
+                  {% else %}
+                    N/A
+                  {% endif %}
+                </div>
+              </div>
+              <div>
+                <div class="label">Subject</div>
+                <div class="value">{{ header.subject or "N/A" }}</div>
+              </div>
+              <div>
+                <div class="label">Date</div>
+                <div class="value">{{ header.date or "N/A" }}</div>
+              </div>
+              <div>
+                <div class="label">Message-ID</div>
+                <div class="value mono">{{ header.message_id or "N/A" }}</div>
+              </div>
+              <div>
+                <div class="label">Reply-To</div>
+                <div class="value mono">{{ header.reply_to or "N/A" }}</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Body content -->
+        <section class="card">
+          <div class="card-header">
+            <h2>Body Content</h2>
+            <div class="card-header-sub">Preview of extracted text bodies</div>
+          </div>
+          <div class="card-body">
+            {% if bodies %}
+              {% set text_body = None %}
+              {% for b in bodies %}
+                {% if (b.content_type or "").lower().startswith("text/plain") and not text_body %}
+                  {% set text_body = b %}
+                {% endif %}
+              {% endfor %}
+              {% if not text_body %}
+                {% set text_body = bodies[0] %}
+              {% endif %}
+
+              <div class="label">Preview</div>
+              <div class="body-preview">
+                {{ text_body.content or "No body content extracted." }}
+              </div>
+              <div class="small muted">
+                Showing 1 of {{ bodies|length }} body part(s).
+              </div>
+            {% else %}
+              <p class="muted small">No email bodies extracted from the .eml file.</p>
+            {% endif %}
+          </div>
+        </section>
+
+        <!-- Attachments + hash enrichment -->
+        <section class="card">
+          <div class="card-header">
+            <h2>Attachments &amp; Hash Enrichment</h2>
+            <div class="card-header-sub">File metadata + VirusTotal/risk summary</div>
+          </div>
+          <div class="card-body">
+            {% if attachment_pairs %}
+              <table class="table compact">
+                <thead>
+                <tr>
+                  <th>Filename</th>
+                  <th>Size</th>
+                  <th>MIME</th>
+                  <th>Hashes</th>
+                  <th>Enrichment</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for att, enriched in attachment_pairs %}
+                  {% set e = enriched.enrichment if enriched else None %}
+                  {% set risk = e.risk if e and e.risk is defined else None %}
+                  {% set vt = e.vt if e and e.vt is defined else None %}
+                  <tr>
+                    <td class="mono">{{ att.filename or "N/A" }}</td>
+                    <td>
+                      {% if att.size %}
+                        {{ "%.1f"|format(att.size / 1024) }} KB
+                      {% else %}
+                        –
+                      {% endif %}
+                    </td>
+                    <td class="small">{{ att.mime_type or "unknown" }}</td>
+                    <td class="mono small">
+                      {% if att.hashes %}
+                        {% if att.hashes.sha256 %}sha256: {{ att.hashes.sha256 }}<br>{% endif %}
+                        {% if att.hashes.sha1 %}sha1: {{ att.hashes.sha1 }}<br>{% endif %}
+                        {% if att.hashes.md5 %}md5: {{ att.hashes.md5 }}{% endif %}
+                      {% else %}
+                        –
+                      {% endif %}
+                    </td>
+                    <td>
+                      {% if e %}
+                        {% if risk %}
+                          <span class="badge badge-{{ risk.severity|default('low') }}">
+                            {{ risk.score }} ({{ risk.severity|upper }})
+                          </span>
+                        {% else %}
+                          <span class="badge badge-muted">Enriched (no risk object)</span>
+                        {% endif %}
+                        {% if vt and vt.last_analysis_stats %}
+                          {% set stats = vt.last_analysis_stats %}
+                          <div class="hint mono">
+                            VT: {{ stats.malicious }} / 
+                            {{ stats.malicious + stats.undetected + stats.harmless + stats.timeout }}
+                            engines marked malicious
+                          </div>
+                        {% endif %}
+                      {% else %}
+                        <span class="badge badge-muted">No enrichment</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+                </tbody>
+              </table>
+            {% else %}
+              <p class="muted small">No attachments present in this email.</p>
+            {% endif %}
+          </div>
+        </section>
+      </div>
+
+      <!-- RIGHT COLUMN -->
+      <div class="right-column">
+        <!-- Email Risk Details -->
+        <section class="card">
+          <div class="card-header">
+            <h2>Risk Breakdown</h2>
+            <div class="card-header-sub">Key phishing indicators detected</div>
+          </div>
+          <div class="card-body card-body-tight">
+            <div class="risk-meter-container">
+              <div>Score: {{ risk.score }}/100 ({{ risk.level|upper }})</div>
+              <div class="risk-meter-bar">
+                <div class="risk-meter-value" style="width: {{ risk.score }}%;"></div>
+              </div>
+            </div>
+
+            <div class="risk-reasons">
+              <div class="small">Reasons</div>
+              <ul>
+                {% for r in risk.reasons %}
+                  <li>{{ r }}</li>
+                {% endfor %}
+              </ul>
+            </div>
+
+            <div class="chips-row">
+              {% if "Urgent / pressure language" in (risk.reasons | join(",")) %}
+                <span class="chip chip-urgent">Urgency / pressure language</span>
+              {% endif %}
+              {% if "Sender domain" in (risk.reasons | join(",")) %}
+                <span class="chip chip-domain-mismatch">Sender vs. Received domain mismatch</span>
+              {% endif %}
+              {% for v in verdicts %}
+                {% if v.name and v.name|lower == "spamassassin" and v.score %}
+                  <span class="chip chip-spam">
+                    SpamAssassin score: {{ v.score }}
+                  </span>
+                {% endif %}
+              {% endfor %}
+            </div>
+          </div>
+        </section>
+
+        <!-- Infrastructure IOCs: domains + IPs -->
+        <section class="card">
+          <div class="card-header">
+            <h2>Infrastructure IOCs</h2>
+            <div class="card-header-sub">Domains &amp; IPs with OSINT enrichment</div>
+          </div>
+          <div class="card-body">
+            <div class="infra-grid">
+              <!-- Domains -->
+              <div>
+                <h3 class="small muted" style="margin:0 0 6px 0;">Domains</h3>
+                {% if enrichment.domains %}
+                  <table class="table compact">
+                    <thead>
+                    <tr>
+                      <th>Domain</th>
+                      <th>Risk</th>
+                      <th>Notes</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for d in enrichment.domains %}
+                      {% set e = d.enrichment %}
+                      {% set risk = e.risk if e and e.risk is defined else None %}
+                      {% set whois = e.whois if e and e.whois is defined else None %}
+                      <tr>
+                        <td class="mono">{{ d.domain }}</td>
+                        <td>
+                          {% if risk %}
+                            <span class="badge badge-{{ risk.severity|default('low') }}">
+                              {{ risk.score }} ({{ risk.severity|upper }})
+                            </span>
+                          {% else %}
+                            <span class="badge badge-muted">No risk</span>
+                          {% endif %}
+                        </td>
+                        <td class="small">
+                          {% if whois %}
+                            {% if whois.domain_age_days is not none %}
+                              Age: {{ whois.domain_age_days }} days.
+                            {% endif %}
+                            {% if whois.registrar %}
+                              &nbsp;Registrar: {{ whois.registrar }}.
+                            {% endif %}
+                          {% else %}
+                            –
+                          {% endif %}
+                        </td>
+                      </tr>
+                    {% endfor %}
+                    </tbody>
+                  </table>
+                {% else %}
+                  <p class="muted small">No domains extracted.</p>
+                {% endif %}
+              </div>
+
+              <!-- IPs -->
+              <div>
+                <h3 class="small muted" style="margin:0 0 6px 0;">IPs</h3>
+                {% if enrichment.ips %}
+                  <table class="table compact">
+                    <thead>
+                    <tr>
+                      <th>IP</th>
+                      <th>Risk</th>
+                      <th>Geo / Reputation</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for ip in enrichment.ips %}
+                      {% set e = ip.enrichment %}
+                      {% set risk = e.risk if e and e.risk is defined else None %}
+                      {% set ipinfo = e.ipinfo if e and e.ipinfo is defined else None %}
+                      {% set abuse = e.abuseipdb if e and e.abuseipdb is defined else None %}
+                      <tr>
+                        <td class="mono">{{ ip.ip }}</td>
+                        <td>
+                          {% if risk %}
+                            <span class="badge badge-{{ risk.severity|default('low') }}">
+                              {{ risk.score }} ({{ risk.severity|upper }})
+                            </span>
+                          {% else %}
+                            <span class="badge badge-muted">No risk</span>
+                          {% endif %}
+                        </td>
+                        <td class="small">
+                          {% set parts = [] %}
+                          {% if ipinfo %}
+                            {% if ipinfo.city %}{% set _ = parts.append(ipinfo.city) %}{% endif %}
+                            {% if ipinfo.country %}{% set _ = parts.append(ipinfo.country) %}{% endif %}
+                          {% endif %}
+                          {% if parts %}
+                            {{ parts|join(", ") }}
+                          {% endif %}
+                          {% if abuse and abuse.abuseConfidenceScore is not none %}
+                            {% if parts %}&nbsp;·&nbsp;{% endif %}
+                            AbuseIPDB: {{ abuse.abuseConfidenceScore }}/100
+                          {% endif %}
+                          {% if not parts and not abuse %}
+                            –
+                          {% endif %}
+                        </td>
+                      </tr>
+                    {% endfor %}
+                    </tbody>
+                  </table>
+                {% else %}
+                  <p class="muted small">No IPs extracted.</p>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Timeline -->
+        <section class="card">
+          <div class="card-header">
+            <h2>Investigation Timeline</h2>
+            <div class="card-header-sub">High-level sequence of events</div>
+          </div>
+          <div class="card-body card-body-tight">
+            {% if timeline %}
+              <div class="timeline">
+                {% for ev in timeline %}
+                  <div class="timeline-item">
+                    <div class="timeline-label">
+                      {% if ev.type == "email_received" %}
+                        EMAIL RECEIVED
+                      {% elif ev.type == "attachments_extracted" %}
+                        ATTACHMENTS
+                      {% elif ev.type == "ioc_enrichment_completed" %}
+                        IOC ENRICHMENT
+                      {% else %}
+                        EVENT
+                      {% endif %}
+                    </div>
+                    <div class="timeline-content">
+                      <div class="timeline-dot"></div>
+                      <div class="timeline-title">
+                        {% if ev.type == "email_received" %}
+                          Email received{% if ev.details.subject %}: "{{ ev.details.subject }}"{% endif %}
+                        {% elif ev.type == "attachments_extracted" %}
+                          Attachments extracted ({{ ev.details.count }})
+                        {% elif ev.type == "ioc_enrichment_completed" %}
+                          IOC enrichment completed
+                        {% else %}
+                          {{ ev.type }}
+                        {% endif %}
+                      </div>
+                      <div class="timeline-meta">
+                        {% if ev.ts %}
+                          {{ ev.ts }}
+                        {% else %}
+                          Time not available
+                        {% endif %}
+                      </div>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <p class="muted small">No timeline data available.</p>
+            {% endif %}
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <div class="footer-meta">
+    <span>Report generated at {{ meta.generated_at if meta and meta.generated_at is defined else "N/A" }}</span>
+  </div>
+</div>
+</body>
+</html>

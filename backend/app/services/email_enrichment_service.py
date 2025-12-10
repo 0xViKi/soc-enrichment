@@ -75,9 +75,8 @@ async def enrich_email_iocs(iocs: EmailIOCBundle) -> EmailEnrichmentBundle:
             domain_set.add(d.lower())
 
     for ip in iocs.received_ips:
-        # only keep syntactically valid IPs
         if is_valid_ip(ip):
-            ip_set.add(ip.strip())
+            ip_set.add(ip)
 
     # Collect tasks
     async with httpx.AsyncClient(timeout=15.0) as client:
