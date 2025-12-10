@@ -6,12 +6,34 @@ from pydantic import BaseModel, Field
 class EmailHeader(BaseModel):
     message_id: Optional[str] = Field(None, alias="messageId")
     subject: Optional[str]
+
+    # Sender fields
     from_addr: Optional[str] = Field(None, alias="from")
+    sender_name: Optional[str] = None   # Display name
+    reply_to: Optional[str] = None
+    return_path: Optional[str] = Field(None, alias="returnPath")
+
+    # Recipient fields
     to: List[str] = []
     cc: Optional[List[str]] = None
+
+    # Date
     date: Optional[str]
+
+    # Authentication results
+    spf_result: Optional[str] = Field(None, alias="spfResult")
+    dkim_result: Optional[str] = Field(None, alias="dkimResult")
+    dmarc_result: Optional[str] = Field(None, alias="dmarcResult")
+    authentication_results: Optional[str] = Field(None, alias="authResults")
+
+    # IP & routing metadata
     received_domains: List[str] = Field(default_factory=list, alias="receivedDomain")
     received_ips: List[str] = Field(default_factory=list, alias="receivedIp")
+    originating_ip: Optional[str] = Field(None, alias="originatingIp")
+
+    # Mail client metadata
+    x_mailer: Optional[str] = Field(None, alias="xMailer")
+    user_agent: Optional[str] = Field(None, alias="userAgent")
 
 
 class EmailBody(BaseModel):

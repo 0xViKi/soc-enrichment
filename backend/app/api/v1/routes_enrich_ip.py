@@ -1,5 +1,6 @@
 from fastapi import APIRouter
-from typing import Any
+from typing import Any, Optional
+import logging
 
 from app.schemas.ip_enrich import (
     IPEnrichRequest,
@@ -14,14 +15,40 @@ from app.services.dns_service import resolve_a_records
 from app.services.risk_scoring.ip_risk import compute_ip_risk
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+async def _safe_fetch_abuse(ip_str: str) -> Optional[dict]:
+    try:
+        return await fetch_abuseipdb(ip_str)
+    except Exception as e:
+        logger.warning("AbuseIPDB fetch failed for %s: %s", ip_str, e)
+        return None
+
+
+async def _safe_fetch_ipinfo(ip_str: str) -> Optional[dict]:
+    try:
+        return await fetch_ipinfo(ip_str)
+    except Exception as e:
+        logger.warning("IPInfo fetch failed for %s: %s", ip_str, e)
+        return None
+
+
+async def _safe_resolve_a(ip_str: str) -> tuple[list[str], Optional[str]]:
+    try:
+        return await resolve_a_records(ip_str)
+    except Exception as e:
+        logger.warning("DNS A record resolution failed for %s: %s", ip_str, e)
+        # return empty + error string instead of raising
+        return [], str(e)
 
 
 @router.post("/enrich/ip", response_model=IPEnrichResponse, tags=["enrichment"])
 async def enrich_ip(payload: IPEnrichRequest) -> IPEnrichResponse:
-    ip_str = str(payload.ip)
+    ip_str = str(payload.ip).strip()
 
     # ---- AbuseIPDB ----
-    abuse_raw = await fetch_abuseipdb(ip_str)
+    abuse_raw = await _safe_fetch_abuse(ip_str)
     if abuse_raw:
         abuse = AbuseIPDBData(
             enabled=True,
@@ -34,7 +61,7 @@ async def enrich_ip(payload: IPEnrichRequest) -> IPEnrichResponse:
         abuse = AbuseIPDBData(enabled=False)
 
     # ---- IPInfo ----
-    ipinfo_raw = await fetch_ipinfo(ip_str)
+    ipinfo_raw = await _safe_fetch_ipinfo(ip_str)
     if ipinfo_raw:
         ipinfo = IPInfoData(
             enabled=True,
@@ -50,7 +77,7 @@ async def enrich_ip(payload: IPEnrichRequest) -> IPEnrichResponse:
         ipinfo = IPInfoData(enabled=False)
 
     # ---- DNS ----
-    a_records, dns_error = await resolve_a_records(ip_str)
+    a_records, dns_error = await _safe_resolve_a(ip_str)
     dns = DNSData(
         enabled=True,
         a_records=a_records,
@@ -60,7 +87,6 @@ async def enrich_ip(payload: IPEnrichRequest) -> IPEnrichResponse:
     # ---- Risk ----
     risk = compute_ip_risk(abuse=abuse, ipinfo=ipinfo, dns=dns)
 
-    # ---- Meta ----
     meta: dict[str, Any] = {
         "case_id": payload.case_id,
     }

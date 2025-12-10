@@ -1,6 +1,6 @@
-from typing import Any
-
+from typing import Any, Optional
 from fastapi import APIRouter
+import logging
 
 from app.schemas.hash_enrich import (
     HashEnrichRequest,
@@ -12,15 +12,24 @@ from app.services.vt_service import fetch_vt_file
 from app.services.risk_scoring.hash_risk import compute_hash_risk
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+async def _safe_fetch_vt(hash_value: str) -> Optional[dict]:
+    try:
+        return await fetch_vt_file(hash_value)
+    except Exception as e:
+        logger.warning("VT file lookup failed for %s: %s", hash_value, e)
+        return None
 
 
 @router.post("/enrich/hash", response_model=HashEnrichResponse, tags=["enrichment"])
 async def enrich_hash(payload: HashEnrichRequest) -> HashEnrichResponse:
     hash_value = payload.hash_value.strip().lower()
 
-    vt_raw = await fetch_vt_file(hash_value)
+    vt_raw = await _safe_fetch_vt(hash_value)
     if vt_raw:
-        attr = vt_raw.get("attributes", {})
+        attr = vt_raw.get("attributes", {}) or {}
 
         stats = attr.get("last_analysis_stats", {}) or {}
         vt_stats = VTRawStats(

@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 import asyncio
 from ipaddress import ip_address
 
@@ -13,6 +13,11 @@ from app.schemas.email_analysis import (
     EnrichedIP,
     EmailEnrichmentBundle,
 )
+
+# Limit how many internal /enrich calls we make at once
+# You can make this configurable via settings if you like
+_INTERNAL_ENRICH_CONCURRENCY = getattr(settings, "INTERNAL_ENRICH_CONCURRENCY", 5)
+_SEM = asyncio.Semaphore(_INTERNAL_ENRICH_CONCURRENCY)
 
 
 def is_valid_ip(value: str) -> bool:
@@ -37,50 +42,49 @@ async def _post_json(
       - Parsed JSON dict on success
       - {"failed": True, ...} dict on any error
     """
+    async with _SEM:
+        try:
+            resp = await client.post(path, json=payload)
+        except Exception as e:
+            return {
+                "failed": True,
+                "stage": "request",
+                "error_type": type(e).__name__,
+                "error": str(e),
+                "path": path,
+                "payload": payload,
+            }
 
-    # NOTE: we rely on AsyncClient(base_url=...) so `path` is like "/enrich/hash"
-    try:
-        resp = await client.post(path, json=payload)
-    except Exception as e:
-        return {
-            "failed": True,
-            "stage": "request",
-            "error_type": type(e).__name__,
-            "error": str(e),
-            "path": path,
-            "payload": payload,
-        }
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            # 4xx / 5xx from /enrich/*
+            text = resp.text
+            return {
+                "failed": True,
+                "stage": "status",
+                "status_code": resp.status_code,
+                "error_type": type(e).__name__,
+                "error": str(e),
+                "path": path,
+                "payload": payload,
+                "body_snippet": text[:300],
+            }
 
-    try:
-        resp.raise_for_status()
-    except httpx.HTTPStatusError as e:
-        # 4xx / 5xx from /enrich/*
-        text = resp.text
-        return {
-            "failed": True,
-            "stage": "status",
-            "status_code": resp.status_code,
-            "error_type": type(e).__name__,
-            "error": str(e),
-            "path": path,
-            "payload": payload,
-            "body_snippet": text[:300],
-        }
-
-    try:
-        return resp.json()
-    except Exception as e:
-        text = resp.text
-        return {
-            "failed": True,
-            "stage": "json",
-            "status_code": resp.status_code,
-            "error_type": type(e).__name__,
-            "error": str(e),
-            "path": path,
-            "payload": payload,
-            "body_snippet": text[:300],
-        }
+        try:
+            return resp.json()
+        except Exception as e:
+            text = resp.text
+            return {
+                "failed": True,
+                "stage": "json",
+                "status_code": resp.status_code,
+                "error_type": type(e).__name__,
+                "error": str(e),
+                "path": path,
+                "payload": payload,
+                "body_snippet": text[:300],
+            }
 
 
 def _choose_hash(h: AttachmentHashSet) -> str | None:
@@ -111,20 +115,28 @@ async def enrich_email_iocs(iocs: EmailIOCBundle) -> EmailEnrichmentBundle:
     domain_set: set[str] = set()
     ip_set: set[str] = set()
 
+    # --- Normalize domains ---
     if iocs.sender_domain:
-        domain_set.add(iocs.sender_domain.lower())
+        d = iocs.sender_domain.strip().lower()
+        if d:
+            domain_set.add(d)
 
     for d in iocs.received_domains:
-        if d:
-            domain_set.add(d.lower())
+        if not d:
+            continue
+        d_norm = d.strip().lower()
+        if d_norm:
+            domain_set.add(d_norm)
 
+    # --- Normalize IPs ---
     for ip in iocs.received_ips:
-        if is_valid_ip(ip):
-            ip_set.add(ip)
+        if not ip:
+            continue
+        ip_norm = ip.strip()
+        if is_valid_ip(ip_norm):
+            ip_set.add(ip_norm)
 
-    # IMPORTANT: base_url must be the SAME as you use in curl, e.g.:
-    #  INTERNAL_API_BASE_URL = "http://localhost:8000/api/v1"
-    # or in docker network: "http://soc-backend:8000/api/v1"
+    # Base URL must match your curl base (inc. /api/v1 if you use that there)
     base = settings.INTERNAL_API_BASE_URL.rstrip("/")
 
     async with httpx.AsyncClient(
@@ -133,14 +145,17 @@ async def enrich_email_iocs(iocs: EmailIOCBundle) -> EmailEnrichmentBundle:
     ) as client:
         tasks: Dict[str, asyncio.Task] = {}
 
-        # Attachment hash enrichment
+        # Attachment hash enrichment – one task per *unique* hash
+        unique_hashes: set[str] = set()
         for h in iocs.attachment_hashes:
             chosen = _choose_hash(h)
             if not chosen:
-                enriched_attachments.append(
-                    EnrichedAttachment(hash_value="", hashes=h, enrichment=None)
-                )
+                # attachments with no hash will be handled in the mapping step
                 continue
+
+            if chosen in unique_hashes:
+                continue
+            unique_hashes.add(chosen)
 
             key = f"hash:{chosen}"
             tasks[key] = asyncio.create_task(
@@ -178,7 +193,6 @@ async def enrich_email_iocs(iocs: EmailIOCBundle) -> EmailEnrichmentBundle:
             done_list = await asyncio.gather(*tasks.values(), return_exceptions=True)
             for (key, _task), res in zip(tasks.items(), done_list):
                 if isinstance(res, Exception):
-                    # This should now be rare; still guard it
                     results[key] = {
                         "failed": True,
                         "stage": "task",
@@ -188,14 +202,19 @@ async def enrich_email_iocs(iocs: EmailIOCBundle) -> EmailEnrichmentBundle:
                 else:
                     results[key] = res
 
-    # Map results back
+    # --- Map results back ---
 
     # Attachments
     for h in iocs.attachment_hashes:
         chosen = _choose_hash(h)
         if not chosen:
+            # No hash available → no enrichment
             enriched_attachments.append(
-                EnrichedAttachment(hash_value="", hashes=h, enrichment=None)
+                EnrichedAttachment(
+                    hash_value="",
+                    hashes=h,
+                    enrichment=None,
+                )
             )
             continue
 
