@@ -1,5 +1,6 @@
 from typing import Any, Dict, List, Tuple
 import asyncio
+from ipaddress import ip_address
 
 import httpx
 
@@ -13,8 +14,6 @@ from app.schemas.email_analysis import (
     EmailEnrichmentBundle,
 )
 
-from ipaddress import ip_address, AddressValueError
-
 
 def is_valid_ip(value: str) -> bool:
     if not value:
@@ -25,18 +24,63 @@ def is_valid_ip(value: str) -> bool:
     except ValueError:
         return False
 
-async def _post_json(client: httpx.AsyncClient, path: str, payload: dict) -> Dict[str, Any] | None:
+
+async def _post_json(
+    client: httpx.AsyncClient,
+    path: str,
+    payload: dict,
+) -> Dict[str, Any] | None:
     """
-    Helper: POST JSON to internal API, swallow errors and return None on failure.
+    POST JSON to internal /enrich endpoints.
+
+    Returns:
+      - Parsed JSON dict on success
+      - {"failed": True, ...} dict on any error
     """
-    base = settings.INTERNAL_API_BASE_URL.rstrip("/")
-    url = f"{base}{path}"
+
+    # NOTE: we rely on AsyncClient(base_url=...) so `path` is like "/enrich/hash"
     try:
-        resp = await client.post(url, json=payload)
+        resp = await client.post(path, json=payload)
+    except Exception as e:
+        return {
+            "failed": True,
+            "stage": "request",
+            "error_type": type(e).__name__,
+            "error": str(e),
+            "path": path,
+            "payload": payload,
+        }
+
+    try:
         resp.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        # 4xx / 5xx from /enrich/*
+        text = resp.text
+        return {
+            "failed": True,
+            "stage": "status",
+            "status_code": resp.status_code,
+            "error_type": type(e).__name__,
+            "error": str(e),
+            "path": path,
+            "payload": payload,
+            "body_snippet": text[:300],
+        }
+
+    try:
         return resp.json()
-    except Exception:
-        return None
+    except Exception as e:
+        text = resp.text
+        return {
+            "failed": True,
+            "stage": "json",
+            "status_code": resp.status_code,
+            "error_type": type(e).__name__,
+            "error": str(e),
+            "path": path,
+            "payload": payload,
+            "body_snippet": text[:300],
+        }
 
 
 def _choose_hash(h: AttachmentHashSet) -> str | None:
@@ -78,9 +122,16 @@ async def enrich_email_iocs(iocs: EmailIOCBundle) -> EmailEnrichmentBundle:
         if is_valid_ip(ip):
             ip_set.add(ip)
 
-    # Collect tasks
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        tasks: List[Tuple[str, asyncio.Task]] = []
+    # IMPORTANT: base_url must be the SAME as you use in curl, e.g.:
+    #  INTERNAL_API_BASE_URL = "http://localhost:8000/api/v1"
+    # or in docker network: "http://soc-backend:8000/api/v1"
+    base = settings.INTERNAL_API_BASE_URL.rstrip("/")
+
+    async with httpx.AsyncClient(
+        base_url=base,
+        timeout=httpx.Timeout(20.0, connect=10.0),
+    ) as client:
+        tasks: Dict[str, asyncio.Task] = {}
 
         # Attachment hash enrichment
         for h in iocs.attachment_hashes:
@@ -91,48 +142,53 @@ async def enrich_email_iocs(iocs: EmailIOCBundle) -> EmailEnrichmentBundle:
                 )
                 continue
 
-            t = asyncio.create_task(
+            key = f"hash:{chosen}"
+            tasks[key] = asyncio.create_task(
                 _post_json(
                     client,
                     "/enrich/hash",
                     {"hash_value": chosen},
                 )
             )
-            tasks.append((f"hash:{chosen}", t))
 
         # Domain enrichment
         for d in sorted(domain_set):
-            t = asyncio.create_task(
+            key = f"domain:{d}"
+            tasks[key] = asyncio.create_task(
                 _post_json(
                     client,
                     "/enrich/domain",
                     {"domain": d},
                 )
             )
-            tasks.append((f"domain:{d}", t))
 
         # IP enrichment
         for ip in sorted(ip_set):
-            t = asyncio.create_task(
+            key = f"ip:{ip}"
+            tasks[key] = asyncio.create_task(
                 _post_json(
                     client,
                     "/enrich/ip",
                     {"ip": ip},
                 )
             )
-            tasks.append((f"ip:{ip}", t))
 
-        # Await all
         results: Dict[str, Dict[str, Any] | None] = {}
         if tasks:
-            done = await asyncio.gather(*(t for _, t in tasks), return_exceptions=True)
-            for (key, _), res in zip(tasks, done):
+            done_list = await asyncio.gather(*tasks.values(), return_exceptions=True)
+            for (key, _task), res in zip(tasks.items(), done_list):
                 if isinstance(res, Exception):
-                    results[key] = None
+                    # This should now be rare; still guard it
+                    results[key] = {
+                        "failed": True,
+                        "stage": "task",
+                        "error_type": type(res).__name__,
+                        "error": str(res),
+                    }
                 else:
                     results[key] = res
 
-    # Now map results back
+    # Map results back
 
     # Attachments
     for h in iocs.attachment_hashes:
