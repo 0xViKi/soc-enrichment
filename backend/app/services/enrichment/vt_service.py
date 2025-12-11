@@ -60,3 +60,31 @@ async def fetch_vt_ip(ip: str) -> Optional[dict[str, Any]]:
             return data.get("data")
     except Exception:
         return None
+
+async def fetch_vt_domain(domain: str) -> Optional[dict[str, Any]]:
+    """
+    Look up a domain using VT v3 API.
+    Returns the 'data' object or None.
+    """
+    api_key = settings.VIRUSTOTAL_API_KEY
+    if not api_key:
+        return None
+
+    # VT expects bare domain (no protocol)
+    domain = domain.strip().lower()
+    url = f"{BASE_URL}/domains/{domain}"
+    headers = {
+        "x-apikey": api_key,
+        "Accept": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code == 404:
+                return None
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("data")
+    except Exception:
+        return None

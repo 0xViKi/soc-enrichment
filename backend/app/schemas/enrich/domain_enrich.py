@@ -38,6 +38,21 @@ class URLScanData(BaseModel):
     malicious_count: int = 0
 
 
+class VirusTotalDomainData(BaseModel):
+    """
+    Normalized VirusTotal metadata for a domain.
+    """
+    enabled: bool = False
+    reputation: Optional[int] = None
+    last_analysis_stats: Optional[dict[str, Any]] = None
+    last_analysis_date: Optional[int] = None
+    categories: list[str] = []
+    registrar: Optional[str] = None
+    tld: Optional[str] = None
+    whois: Optional[str] = None
+    raw: Optional[dict[str, Any]] = None
+
+
 class DomainRiskFactor(BaseModel):
     name: str
     weight: float
@@ -62,5 +77,6 @@ class DomainEnrichResponse(BaseModel):
     whois: WHOISData
     dns: DNSRecordData
     urlscan: URLScanData
+    vt: VirusTotalDomainData
     risk: DomainRiskScore
     meta: dict[str, Any]

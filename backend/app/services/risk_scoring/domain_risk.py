@@ -6,6 +6,7 @@ from backend.app.schemas.enrich.domain_enrich import (
     URLScanData,
     DomainRiskScore,
     DomainRiskFactor,
+    VirusTotalDomainData,
 )
 from app.services.risk_scoring.risk_utils import severity_from_score
 
@@ -59,6 +60,19 @@ def _urlscan_malicious_score(urlscan: URLScanData) -> float:
     return 100.0
 
 
+def _urlscan_malicious_tags(urlscan: URLScanData) -> List[str]:
+    """
+    Extract all tags across URLScan findings for context.
+    """
+    tags: List[str] = []
+    if not urlscan or not urlscan.results:
+        return tags
+
+    for r in urlscan.results:
+        tags.extend(r.tags or [])
+    return list({t.lower() for t in tags})
+
+
 def _urlscan_seen_score(urlscan: URLScanData) -> float:
     """
     Being seen in URLScan at all is a moderate risk indicator, especially
@@ -72,15 +86,10 @@ def _urlscan_seen_score(urlscan: URLScanData) -> float:
         return 0.0
 
     base = 45.0
-    tags: List[str] = _safe_get(urlscan, "tags", []) or []
-    tags_l = [t.lower() for t in tags]
+    tags_l = _urlscan_malicious_tags(urlscan)
 
     if any(t in tags_l for t in ("phishing", "malware", "scam", "crypto-scam")):
         return 80.0
-
-    page_title = (_safe_get(urlscan, "page_title", "") or "").lower()
-    if any(x in page_title for x in ("parked", "suspended", "for sale")):
-        return 65.0
 
     return base
 
@@ -277,9 +286,7 @@ def _normalize_label(label: str) -> str:
 
 def _homograph_brand_impersonation_score(domain: Optional[str]) -> float:
     """
-    Detect basic homograph / brand-impersonation:
-    - Compare the 2nd-level label against known brands with a simple
-      normalised similarity metric.
+    Detect basic homograph / brand-impersonation.
     """
     if not domain:
         return 0.0
@@ -297,11 +304,9 @@ def _homograph_brand_impersonation_score(domain: Optional[str]) -> float:
 
     for brand in BRAND_KEYWORDS:
         b_norm = _normalize_label(brand)
-        # rough similarity: ratio of matching chars in same positions
         m = sum(1 for a, b in zip(sld, b_norm) if a == b)
         sim = m / max(len(sld), len(b_norm))
         if sim >= 0.7:
-            # High similarity to brand name → suspicious
             max_score = max(max_score, 90.0)
         elif sim >= 0.5:
             max_score = max(max_score, 60.0)
@@ -311,10 +316,7 @@ def _homograph_brand_impersonation_score(domain: Optional[str]) -> float:
 
 def _dga_like_score(domain: Optional[str]) -> float:
     """
-    Extremely simple DGA-ish / random-looking domain heuristic:
-    - Long SLD
-    - Low vowel ratio
-    - Few meaningful substrings.
+    Extremely simple DGA-ish / random-looking domain heuristic.
     """
     if not domain:
         return 0.0
@@ -348,8 +350,7 @@ def _domain_string_risk_score(domain: Optional[str]) -> float:
 
 def _whois_completeness_score(whois: WHOISData) -> float:
     """
-    Check how complete WHOIS is:
-    missing org / country / email → higher risk (privacy or cheap registrar).
+    Check how complete WHOIS is.
     """
     org = _safe_get(whois, "org", None) or _safe_get(whois, "organization", None)
     country = _safe_get(whois, "country", None)
@@ -372,6 +373,22 @@ def _whois_completeness_score(whois: WHOISData) -> float:
     return 80.0
 
 
+def _vt_detection_score_domain(vt: VirusTotalDomainData | None) -> float:
+    """
+    Use VT last_analysis_stats to derive a 0–100 score based on
+    proportion of malicious engines.
+    """
+    if not vt or not vt.enabled or not vt.last_analysis_stats:
+        return 0.0
+
+    stats = vt.last_analysis_stats or {}
+    malicious = float(stats.get("malicious", 0) or 0)
+    total = float(sum(stats.values()) or 1.0)
+
+    ratio = (malicious / total) * 100.0
+    return min(100.0, ratio)
+
+
 # --------------------------------------------------------------------
 # Main API
 # --------------------------------------------------------------------
@@ -381,6 +398,7 @@ def compute_domain_risk(
     whois: WHOISData,
     dns: DNSRecordData,
     urlscan: URLScanData,
+    vt: VirusTotalDomainData | None = None,
 ) -> DomainRiskScore:
     """
     Advanced domain risk model combining:
@@ -392,6 +410,7 @@ def compute_domain_risk(
     - DNS misconfig / suspicious patterns
     - Registrar reputation
     - Homograph / DGA-like domain appearance
+    - VirusTotal detection ratio
     into a 0–100 score.
     """
 
@@ -404,9 +423,9 @@ def compute_domain_risk(
     factors.append(
         DomainRiskFactor(
             name="domain_age",
-            weight=0.18,
+            weight=0.16,
             value=age_val,
-            contribution=age_val * 0.18,
+            contribution=age_val * 0.16,
         )
     )
 
@@ -415,20 +434,20 @@ def compute_domain_risk(
     factors.append(
         DomainRiskFactor(
             name="urlscan_malicious",
-            weight=0.25,
+            weight=0.22,
             value=mal_val,
-            contribution=mal_val * 0.25,
+            contribution=mal_val * 0.22,
         )
     )
 
-    # 3) URLScan exposure / tags / parked pages
+    # 3) URLScan exposure / tags / presence
     seen_val = _urlscan_seen_score(urlscan)
     factors.append(
         DomainRiskFactor(
             name="urlscan_seen",
-            weight=0.07,
+            weight=0.06,
             value=seen_val,
-            contribution=seen_val * 0.07,
+            contribution=seen_val * 0.06,
         )
     )
 
@@ -437,9 +456,9 @@ def compute_domain_risk(
     factors.append(
         DomainRiskFactor(
             name="whois_privacy_enabled",
-            weight=0.08,
+            weight=0.07,
             value=privacy_val,
-            contribution=privacy_val * 0.08,
+            contribution=privacy_val * 0.07,
         )
     )
 
@@ -448,9 +467,9 @@ def compute_domain_risk(
     factors.append(
         DomainRiskFactor(
             name="tld_risk_profile",
-            weight=0.08,
+            weight=0.07,
             value=tld_val,
-            contribution=tld_val * 0.08,
+            contribution=tld_val * 0.07,
         )
     )
 
@@ -459,9 +478,9 @@ def compute_domain_risk(
     factors.append(
         DomainRiskFactor(
             name="dns_suspicious_configuration",
-            weight=0.12,
+            weight=0.11,
             value=dns_val,
-            contribution=dns_val * 0.12,
+            contribution=dns_val * 0.11,
         )
     )
 
@@ -470,9 +489,9 @@ def compute_domain_risk(
     factors.append(
         DomainRiskFactor(
             name="registrar_reputation",
-            weight=0.07,
+            weight=0.06,
             value=reg_val,
-            contribution=reg_val * 0.07,
+            contribution=reg_val * 0.06,
         )
     )
 
@@ -481,9 +500,9 @@ def compute_domain_risk(
     factors.append(
         DomainRiskFactor(
             name="domain_string_appearance",
-            weight=0.10,
+            weight=0.09,
             value=dom_str_val,
-            contribution=dom_str_val * 0.10,
+            contribution=dom_str_val * 0.09,
         )
     )
 
@@ -492,13 +511,24 @@ def compute_domain_risk(
     factors.append(
         DomainRiskFactor(
             name="whois_completeness",
-            weight=0.05,
+            weight=0.04,
             value=whois_comp_val,
-            contribution=whois_comp_val * 0.05,
+            contribution=whois_comp_val * 0.04,
         )
     )
 
-    # Weights: 0.18 + 0.25 + 0.07 + 0.08 + 0.08 + 0.12 + 0.07 + 0.10 + 0.05 = 1.0
+    # 10) VirusTotal detection ratio
+    vt_val = _vt_detection_score_domain(vt)
+    factors.append(
+        DomainRiskFactor(
+            name="virustotal_detection_ratio",
+            weight=0.12,
+            value=vt_val,
+            contribution=vt_val * 0.12,
+        )
+    )
+
+    # Weights: 0.16 + 0.22 + 0.06 + 0.07 + 0.07 + 0.11 + 0.06 + 0.09 + 0.04 + 0.12 = 1.0
 
     total = int(round(sum(f.contribution for f in factors)))
     severity = severity_from_score(total)

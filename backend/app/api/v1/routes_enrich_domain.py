@@ -9,10 +9,12 @@ from backend.app.schemas.enrich.domain_enrich import (
     DNSRecordData,
     URLScanData,
     URLScanFinding,
+    VirusTotalDomainData,
 )
 from backend.app.services.enrichment.dns_service import resolve_dns_records
 from backend.app.services.enrichment.whois_service import normalize_whois
 from backend.app.services.enrichment.urlscan_service import search_urlscan_domain
+from app.services.vt_service import fetch_vt_domain
 from app.services.risk_scoring.domain_risk import compute_domain_risk
 
 router = APIRouter()
@@ -41,6 +43,14 @@ async def _safe_urlscan(domain: str) -> Optional[dict]:
         return await search_urlscan_domain(domain)
     except Exception as e:
         logger.warning("URLScan lookup failed for %s: %s", domain, e)
+        return None
+
+
+async def _safe_vt_domain(domain: str) -> Optional[dict]:
+    try:
+        return await fetch_vt_domain(domain)
+    except Exception as e:
+        logger.warning("VirusTotal domain lookup failed for %s: %s", domain, e)
         return None
 
 
@@ -96,8 +106,40 @@ async def enrich_domain(payload: DomainEnrichRequest) -> DomainEnrichResponse:
         malicious_count=malicious_count,
     )
 
+    # ---- VirusTotal (Domain) ----
+    vt_raw = await _safe_vt_domain(domain)
+    if vt_raw:
+        attr = vt_raw.get("attributes", {}) if isinstance(vt_raw, dict) else {}
+        cats = attr.get("categories")
+        if isinstance(cats, dict):
+            categories = list(cats.keys())
+        elif isinstance(cats, list):
+            categories = cats
+        else:
+            categories = []
+
+        # simple TLD extraction for convenience
+        tld = None
+        parts = domain.split(".")
+        if len(parts) >= 2:
+            tld = parts[-1]
+
+        vt = VirusTotalDomainData(
+            enabled=True,
+            reputation=attr.get("reputation"),
+            last_analysis_stats=attr.get("last_analysis_stats"),
+            last_analysis_date=attr.get("last_analysis_date"),
+            categories=categories,
+            registrar=attr.get("registrar"),
+            tld=tld,
+            whois=attr.get("whois"),
+            raw=vt_raw,
+        )
+    else:
+        vt = VirusTotalDomainData(enabled=False)
+
     # ---- Risk ----
-    risk = compute_domain_risk(whois=whois, dns=dns, urlscan=urlscan)
+    risk = compute_domain_risk(whois=whois, dns=dns, urlscan=urlscan, vt=vt)
 
     meta: dict[str, Any] = {
         "case_id": payload.case_id,
@@ -109,6 +151,7 @@ async def enrich_domain(payload: DomainEnrichRequest) -> DomainEnrichResponse:
         whois=whois,
         dns=dns,
         urlscan=urlscan,
+        vt=vt,
         risk=risk,
         meta=meta,
     )
