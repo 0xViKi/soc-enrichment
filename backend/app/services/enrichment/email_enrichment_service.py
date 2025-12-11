@@ -4,8 +4,8 @@ from ipaddress import ip_address
 
 import httpx
 
-from app.config import settings
-from backend.app.schemas.enrich.email_enrich import (
+from app.core.config import settings
+from app.schemas.enrich.email_enrich import (
     AttachmentHashSet,
     EmailIOCBundle,
     EnrichedAttachment,

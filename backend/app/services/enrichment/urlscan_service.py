@@ -2,7 +2,7 @@ from typing import Any, Optional
 
 import httpx
 
-from app.config import settings
+from app.core.config import settings
 
 
 SEARCH_URL = "https://urlscan.io/api/v1/search/"

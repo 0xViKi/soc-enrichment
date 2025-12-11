@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Optional, List
 
-from backend.app.schemas.enrich.ip_enrich import (
+from app.schemas.enrich.ip_enrich import (
     AbuseIPDBData,
     IPInfoData,
     DNSData,

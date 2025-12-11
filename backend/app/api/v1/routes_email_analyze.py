@@ -2,7 +2,7 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from typing import List
 
-from backend.app.schemas.enrich.email_enrich import (
+from app.schemas.enrich.email_enrich import (
     EmailAnalysisResponse,
     EmailHeader,
     EmailBody,
@@ -12,9 +12,9 @@ from backend.app.schemas.enrich.email_enrich import (
     AttachmentHashSet,
     EmailIOCBundle,
 )
-from app.services.eml_analyzer_service import analyze_eml_file
+from app.services.email_analyzer.eml_analyzer_service import analyze_eml_file
 from app.services.risk_scoring.email_risk import compute_email_risk
-from backend.app.services.enrichment.email_enrichment_service import enrich_email_iocs
+from app.services.enrichment.email_enrichment_service import enrich_email_iocs
 
 router = APIRouter(prefix="/email", tags=["email"])
 

@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi import Request
 
-from backend.app.schemas.enrich.email_enrich import (
+from app.schemas.enrich.email_enrich import (
     EmailHeader,
     EmailBody,
     EmailAttachment,
@@ -15,9 +15,9 @@ from backend.app.schemas.enrich.email_enrich import (
     AttachmentHashSet,
     EmailIOCBundle,
 )
-from app.services.eml_analyzer_service import analyze_eml_file
+from app.services.email_analyzer.eml_analyzer_service import analyze_eml_file
 from app.services.risk_scoring.email_risk import compute_email_risk
-from backend.app.services.enrichment.email_enrichment_service import enrich_email_iocs
+from app.services.enrichment.email_enrichment_service import enrich_email_iocs
 
 router = APIRouter(prefix="/email", tags=["email-report"])
 

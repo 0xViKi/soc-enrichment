@@ -2,7 +2,7 @@ from typing import Any, Optional
 
 import httpx
 
-from app.config import settings
+from app.core.config import settings
 
 
 BASE_URL = "https://api.abuseipdb.com/api/v2/check"

@@ -3,7 +3,7 @@ import httpx
 from fastapi import UploadFile
 from typing import Any, Dict
 
-from app.config import settings
+from app.core.config import settings
 
 
 EML_ANALYZER_URL = (

@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from typing import Any, Optional
 import logging
 
-from backend.app.schemas.enrich.ip_enrich import (
+from app.schemas.enrich.ip_enrich import (
     IPEnrichRequest,
     IPEnrichResponse,
     AbuseIPDBData,
@@ -10,11 +10,11 @@ from backend.app.schemas.enrich.ip_enrich import (
     DNSData,
     VirusTotalIPData,
 )
-from backend.app.services.enrichment.abuseipdb_service import fetch_abuseipdb
-from backend.app.services.enrichment.ipinfo_service import fetch_ipinfo
-from backend.app.services.enrichment.dns_service import resolve_a_records
-from backend.app.services.enrichment.vt_service import fetch_vt_ip
-from backend.app.services.risk_scoring.ip_risk import compute_ip_risk
+from app.services.enrichment.abuseipdb_service import fetch_abuseipdb
+from app.services.enrichment.ipinfo_service import fetch_ipinfo
+from app.services.enrichment.dns_service import resolve_a_records
+from app.services.enrichment.vt_service import fetch_vt_ip
+from app.services.risk_scoring.ip_risk import compute_ip_risk
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

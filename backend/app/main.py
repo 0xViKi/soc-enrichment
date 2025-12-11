@@ -7,7 +7,7 @@ from app.api.v1.routes_enrich_hash import router as hash_router
 from app.api.v1.routes_email_analyze import router as email_router
 from app.api.v1.routes_email_report import router as email_report_router
 
-from app.config import settings
+from app.core.config import settings
 
 
 app = FastAPI(

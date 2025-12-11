@@ -2,7 +2,7 @@ from typing import Any, List, Optional
 from fastapi import APIRouter
 import logging
 
-from backend.app.schemas.enrich.domain_enrich import (
+from app.schemas.enrich.domain_enrich import (
     DomainEnrichRequest,
     DomainEnrichResponse,
     WHOISData,
@@ -11,10 +11,10 @@ from backend.app.schemas.enrich.domain_enrich import (
     URLScanFinding,
     VirusTotalDomainData,
 )
-from backend.app.services.enrichment.dns_service import resolve_dns_records
-from backend.app.services.enrichment.whois_service import normalize_whois
-from backend.app.services.enrichment.urlscan_service import search_urlscan_domain
-from app.services.vt_service import fetch_vt_domain
+from app.services.enrichment.dns_service import resolve_dns_records
+from app.services.enrichment.whois_service import normalize_whois
+from app.services.enrichment.urlscan_service import search_urlscan_domain
+from app.services.enrichment.vt_service import fetch_vt_domain
 from app.services.risk_scoring.domain_risk import compute_domain_risk
 
 router = APIRouter()

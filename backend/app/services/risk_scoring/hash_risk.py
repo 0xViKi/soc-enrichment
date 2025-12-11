@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, List
 
-from backend.app.schemas.enrich.hash_enrich import (
+from app.schemas.enrich.hash_enrich import (
     VTData,
     HashRiskScore,
     HashRiskFactor,

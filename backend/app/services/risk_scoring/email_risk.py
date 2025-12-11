@@ -3,7 +3,7 @@
 from typing import List, Any, Dict, Optional
 import re
 
-from backend.app.schemas.enrich.email_enrich import (
+from app.schemas.enrich.email_enrich import (
     EmailHeader,
     EmailBody,
     EmailAttachment,
