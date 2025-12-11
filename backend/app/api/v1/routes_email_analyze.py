@@ -2,7 +2,7 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from typing import List
 
-from app.schemas.email_analysis import (
+from backend.app.schemas.enrich.email_enrich import (
     EmailAnalysisResponse,
     EmailHeader,
     EmailBody,
@@ -14,7 +14,7 @@ from app.schemas.email_analysis import (
 )
 from app.services.eml_analyzer_service import analyze_eml_file
 from app.services.risk_scoring.email_risk import compute_email_risk
-from app.services.email_enrichment_service import enrich_email_iocs
+from backend.app.services.enrichment.email_enrichment_service import enrich_email_iocs
 
 router = APIRouter(prefix="/email", tags=["email"])
 

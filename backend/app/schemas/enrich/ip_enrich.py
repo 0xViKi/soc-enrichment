@@ -27,6 +27,21 @@ class DNSData(BaseModel):
     error: Optional[str] = None
 
 
+class VirusTotalIPData(BaseModel):
+    """
+    Normalized VirusTotal metadata for an IP address.
+    Mirrors the style you used for VT hash.
+    """
+    enabled: bool = False
+    reputation: Optional[int] = None
+    last_analysis_stats: Optional[dict[str, Any]] = None
+    last_analysis_date: Optional[int] = None
+    categories: list[str] = []
+    country: Optional[str] = None
+    as_owner: Optional[str] = None
+    raw: Optional[dict[str, Any]] = None
+
+
 class IPRiskFactor(BaseModel):
     name: str
     weight: float
@@ -51,5 +66,6 @@ class IPEnrichResponse(BaseModel):
     abuseipdb: AbuseIPDBData
     ipinfo: IPInfoData
     dns: DNSData
+    vt: VirusTotalIPData
     risk: IPRiskScore
     meta: dict[str, Any]

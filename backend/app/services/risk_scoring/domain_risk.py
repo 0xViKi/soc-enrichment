@@ -1,6 +1,6 @@
 from typing import Optional, List
 
-from app.schemas.domain_enrich import (
+from backend.app.schemas.enrich.domain_enrich import (
     WHOISData,
     DNSRecordData,
     URLScanData,

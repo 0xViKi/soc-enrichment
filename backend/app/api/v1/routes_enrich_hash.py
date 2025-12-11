@@ -2,13 +2,13 @@ from typing import Any, Optional
 from fastapi import APIRouter
 import logging
 
-from app.schemas.hash_enrich import (
+from backend.app.schemas.enrich.hash_enrich import (
     HashEnrichRequest,
     HashEnrichResponse,
     VTData,
     VTRawStats,
 )
-from app.services.vt_service import fetch_vt_file
+from backend.app.services.enrichment.vt_service import fetch_vt_file
 from app.services.risk_scoring.hash_risk import compute_hash_risk
 
 router = APIRouter()

@@ -5,7 +5,7 @@ from ipaddress import ip_address
 import httpx
 
 from app.config import settings
-from app.schemas.email_analysis import (
+from backend.app.schemas.enrich.email_enrich import (
     AttachmentHashSet,
     EmailIOCBundle,
     EnrichedAttachment,

@@ -1,12 +1,13 @@
 from datetime import datetime, timedelta
 from typing import Optional, List
 
-from app.schemas.ip_enrich import (
+from backend.app.schemas.enrich.ip_enrich import (
     AbuseIPDBData,
     IPInfoData,
     DNSData,
     IPRiskScore,
     IPRiskFactor,
+    VirusTotalIPData,
 )
 from app.services.risk_scoring.risk_utils import severity_from_score
 
@@ -179,6 +180,23 @@ def _ip_freshness_score(ipinfo: IPInfoData) -> float:
         return 20.0
 
 
+def _vt_detection_score(vt: VirusTotalIPData) -> float:
+    """
+    Use VT last_analysis_stats to derive a 0–100 score based on
+    proportion of malicious engines.
+    """
+    if not vt or not vt.enabled or not vt.last_analysis_stats:
+        return 0.0
+
+    stats = vt.last_analysis_stats or {}
+    malicious = float(stats.get("malicious", 0) or 0)
+    total = float(sum(stats.values()) or 1.0)
+
+    ratio = (malicious / total) * 100.0
+    # Cap at 100
+    return min(100.0, ratio)
+
+
 # --------------------------------------------------------
 # Main Advanced IP Risk Engine
 # --------------------------------------------------------
@@ -187,6 +205,7 @@ def compute_ip_risk(
     abuse: AbuseIPDBData,
     ipinfo: IPInfoData,
     dns: DNSData,
+    vt: VirusTotalIPData | None = None,
 ) -> IPRiskScore:
 
     factors = []
@@ -254,12 +273,13 @@ def compute_ip_risk(
         contribution=fresh_score * 0.08,
     ))
 
-    # 8) Placeholder future: cross-correlation with malicious domains
+    # 8) VirusTotal detection ratio
+    vt_score = _vt_detection_score(vt) if vt else 0.0
     factors.append(IPRiskFactor(
-        name="correlated_malicious_infrastructure",
+        name="virustotal_detection_ratio",
         weight=0.08,
-        value=0.0,
-        contribution=0.0,
+        value=vt_score,
+        contribution=vt_score * 0.08,
     ))
 
     # Total score
