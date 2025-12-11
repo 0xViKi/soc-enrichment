@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     # Internal API base (for self-calls from email → enrichment)
     INTERNAL_API_BASE_URL: str = "http://localhost:8000/api/v1"
 
+    # Alerting / Webhooks
+    SLACK_ALERT_WEBHOOK_URL: str | None = None
+    GENERIC_ALERT_WEBHOOK_URL: str | None = None
+
 
     class Config:
         env_file = ".env"

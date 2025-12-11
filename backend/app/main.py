@@ -6,6 +6,7 @@ from app.api.v1.routes_enrich_domain import router as domain_router
 from app.api.v1.routes_enrich_hash import router as hash_router
 from app.api.v1.routes_email_analyze import router as email_router
 from app.api.v1.routes_email_report import router as email_report_router
+from app.api.v1.routes_events import router as events_router
 
 from app.core.config import settings
 
@@ -33,3 +34,4 @@ app.include_router(domain_router, prefix="/api/v1")
 app.include_router(hash_router, prefix="/api/v1")
 app.include_router(email_router, prefix="/api/v1")
 app.include_router(email_report_router, prefix="/api/v1")
+app.include_router(events_router, prefix="/api/v1")

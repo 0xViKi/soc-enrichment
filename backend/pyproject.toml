@@ -18,6 +18,7 @@ python-whois = "^0.9.4"
 tldextract = "^5.1.2"
 python-multipart = "^0.0.9"
 jinja2 = "^3.1.4"
+requests = "^2.31.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

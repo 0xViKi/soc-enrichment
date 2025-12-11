@@ -5,6 +5,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field, HttpUrl
 
+from app.schemas.correlation import CorrelationVerdict  
+
 
 class EventSource(str, Enum):
     WAZUH = "wazuh"
@@ -77,3 +79,4 @@ class EventIngestResponse(BaseModel):
     event_id: str
     status: str = "accepted"
     message: str = "Event ingested successfully."
+    correlation: Optional[CorrelationVerdict] = None  
