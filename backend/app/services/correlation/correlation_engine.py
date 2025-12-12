@@ -7,7 +7,7 @@ from app.schemas.correlation import (
     CorrelationFinding,
     CorrelationVerdict,
 )
-from backend.app.services.events.event_store_service import event_store_service
+from app.services.events.event_store_service import event_store_service
 
 
 class CorrelationEngine:

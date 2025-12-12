@@ -5,10 +5,10 @@ from app.schemas.enrich.ip_enrich import (
     AbuseIPDBData, IPInfoData, DNSData, VirusTotalIPData,
     IPEnrichResponse
 )
-from backend.app.services.enrichment.core_service.abuseipdb_service import fetch_abuseipdb
-from backend.app.services.enrichment.core_service.ipinfo_service import fetch_ipinfo
-from backend.app.services.enrichment.core_service.dns_service import resolve_a_records
-from backend.app.services.enrichment.core_service.vt_service import fetch_vt_ip
+from app.services.enrichment.core_service.abuseipdb_service import fetch_abuseipdb
+from app.services.enrichment.core_service.ipinfo_service import fetch_ipinfo
+from app.services.enrichment.core_service.dns_service import resolve_a_records
+from app.services.enrichment.core_service.vt_service import fetch_vt_ip
 from app.services.risk_scoring.ip_risk import compute_ip_risk
 import logging
 

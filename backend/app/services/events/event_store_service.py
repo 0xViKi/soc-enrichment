@@ -15,7 +15,8 @@ class EventStoreService:
     """
     DB-backed event store (Postgres via SQLAlchemy).
 
-    Interface is the same as before so correlation_engine doesn't break.
+    Interface is the same as the old in-memory version so that
+    correlation_engine and routes don't have to change.
     """
 
     def __init__(self) -> None:
@@ -24,7 +25,13 @@ class EventStoreService:
     def _get_db(self) -> Session:
         return SessionLocal()
 
+    # --------------------------------------------------------
+    # Create / store
+    # --------------------------------------------------------
     def store_event(self, payload: EventIngestRequest) -> str:
+        """
+        Persist a new event and return its generated event_id.
+        """
         db = self._get_db()
         try:
             event_id = str(uuid.uuid4())
@@ -49,11 +56,21 @@ class EventStoreService:
         finally:
             db.close()
 
+    # --------------------------------------------------------
+    # Read single
+    # --------------------------------------------------------
     def get_event(self, event_id: str) -> Dict:
+        """
+        Fetch a single event as a plain dict (for correlation & alerting).
+        Raises if not found.
+        """
         db = self._get_db()
         try:
-            record = db.query(EventRecord).filter(EventRecord.id == event_id).one()
-            # Return a dict shaped like the old in-memory version
+            record = (
+                db.query(EventRecord)
+                .filter(EventRecord.id == event_id)
+                .one()
+            )
             return {
                 "id": record.id,
                 "source": record.source,
@@ -70,7 +87,13 @@ class EventStoreService:
         finally:
             db.close()
 
+    # --------------------------------------------------------
+    # Read list
+    # --------------------------------------------------------
     def list_events(self, limit: int = 50) -> List[Dict]:
+        """
+        Return latest `limit` events ordered by created_at desc.
+        """
         db = self._get_db()
         try:
             q = (
@@ -96,6 +119,26 @@ class EventStoreService:
                     }
                 )
             return out
+        finally:
+            db.close()
+
+    # --------------------------------------------------------
+    # Partial update (for TI-enriched raw_event)
+    # --------------------------------------------------------
+    def update_event_raw_event(self, event_id: str, raw_event: Dict) -> None:
+        """
+        Update only the raw_event JSON for an existing event.
+        Used by the event pipeline after adding TI context.
+        """
+        db = self._get_db()
+        try:
+            record = (
+                db.query(EventRecord)
+                .filter(EventRecord.id == event_id)
+                .one()
+            )
+            record.raw_event = raw_event
+            db.commit()
         finally:
             db.close()
 
