@@ -4,6 +4,7 @@ import requests
 
 from app.schemas.correlation import CorrelationVerdict
 from app.core.config import settings
+from fastapi.encoders import jsonable_encoder
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +45,11 @@ def send_slack_alert(verdict: CorrelationVerdict, event: dict) -> None:
 
     payload = {"text": "\n".join(text_lines)}
 
+    # Make it JSON-safe (datetimes → isoformat, enums → values, etc.)
+    json_payload = jsonable_encoder(payload)
+
     try:
-        resp = requests.post(SLACK_WEBHOOK_URL, json=payload, timeout=5)
+        resp = requests.post(SLACK_WEBHOOK_URL, json=json_payload, timeout=5)
         resp.raise_for_status()
     except Exception as exc:
         logger.exception("Failed to send Slack alert: %s", exc)

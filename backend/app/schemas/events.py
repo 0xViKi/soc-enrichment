@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field
 
 from app.schemas.correlation import CorrelationVerdict  
 
@@ -14,6 +14,7 @@ class EventSource(str, Enum):
     SPLUNK = "splunk"
     CUSTOM = "custom"
     MANUAL = "manual"
+    EMAIL_GATEWAY = "email_gateway" 
 
 
 class EventSeverity(str, Enum):
@@ -29,7 +30,7 @@ class IOCBundle(BaseModel):
     src_ips: List[str] = Field(default_factory=list)
     dst_ips: List[str] = Field(default_factory=list)
     domains: List[str] = Field(default_factory=list)
-    urls: List[HttpUrl] = Field(default_factory=list)
+    urls: List[str] = Field(default_factory=list)
     hashes: List[str] = Field(default_factory=list)
     email_addresses: List[str] = Field(default_factory=list)
     message_ids: List[str] = Field(default_factory=list)

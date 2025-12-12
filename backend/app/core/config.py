@@ -28,6 +28,15 @@ class Settings(BaseSettings):
     SLACK_ALERT_WEBHOOK_URL: str | None = None
     GENERIC_ALERT_WEBHOOK_URL: str | None = None
 
+    # Construct SQLAlchemy URL
+    @property
+    def DATABASE_URL(self) -> str:
+        return (
+            f"postgresql+psycopg2://{self.POSTGRES_USER}:"
+            f"{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:"
+            f"{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
+
 
     class Config:
         env_file = ".env"

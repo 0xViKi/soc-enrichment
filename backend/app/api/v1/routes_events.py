@@ -1,4 +1,5 @@
 # backend/app/api/v1/routes_events.py
+
 from typing import List
 
 from fastapi import APIRouter, HTTPException, status
@@ -7,10 +8,8 @@ from app.schemas.events import (
     EventIngestRequest,
     EventIngestResponse,
 )
-from app.schemas.correlation import CorrelationInput
-from app.services.events.events_store_service import event_store_service
-from app.services.correlation.correlation_engine import correlation_engine
-from app.services.alerting.alert_dispatcher import dispatch_alerts
+from app.services.events.event_store_service import event_store_service
+from app.services.events.event_pipeline_service import event_pipeline_service  # NEW
 
 router = APIRouter(
     prefix="/events",
@@ -24,41 +23,19 @@ router = APIRouter(
     status_code=status.HTTP_202_ACCEPTED,
     summary="Ingest SIEM/log event",
 )
-def ingest_event(payload: EventIngestRequest) -> EventIngestResponse:
+async def ingest_event(payload: EventIngestRequest) -> EventIngestResponse:
     """
-    Ingest a normalized event, run correlation, and (for high-risk events)
-    dispatch alerts to Slack / webhooks.
+    Ingest a normalized event, run IOC enrichment, correlation,
+    and (for high-risk events) dispatch alerts to Slack / webhooks.
+
+    This now uses the EventPipelineService, which:
+      - stores the event
+      - enriches IPs/domains/hashes
+      - attaches TI context into raw_event
+      - runs correlation_engine
+      - calls alert_dispatcher
     """
-    # 1) Store event
-    event_id = event_store_service.store_event(payload)
-
-    # 2) Build correlation input
-    ci = CorrelationInput(
-        event_id=event_id,
-        extracted_iocs=payload.iocs.dict(),
-        raw_event=payload.raw_event,
-    )
-
-    # 3) Run correlation engine
-    verdict = correlation_engine.correlate_event(ci)
-
-    # 4) Fetch stored event doc for alert context
-    event_doc = event_store_service.get_event(event_id)
-
-    # 5) Dispatch alerts (non-blocking in sense of errors)
-    try:
-        dispatch_alerts(verdict, event_doc)
-    except Exception:
-        # Already logged inside, but we don't want to break ingestion.
-        pass
-
-    # 6) Return enriched response
-    return EventIngestResponse(
-        event_id=event_id,
-        status="accepted",
-        message="Event ingested, correlated, and alerting evaluated.",
-        correlation=verdict,
-    )
+    return await event_pipeline_service.process_ingested_event(payload)
 
 
 @router.get("/latest", summary="List latest ingested events (dev/debug)")
