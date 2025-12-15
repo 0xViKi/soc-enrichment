@@ -22,7 +22,7 @@ def _safe_get(obj, attr, default=None):
 
 def _age_to_score(age_days: Optional[int]) -> float:
     """
-    Map domain age in days to a 0–100 risk score.
+    Map domain age in days to a 0-100 risk score.
     Newer domains → higher risk.
     """
     if age_days is None:
@@ -375,7 +375,7 @@ def _whois_completeness_score(whois: WHOISData) -> float:
 
 def _vt_detection_score_domain(vt: VirusTotalDomainData | None) -> float:
     """
-    Use VT last_analysis_stats to derive a 0–100 score based on
+    Use VT last_analysis_stats to derive a 0-100 score based on
     proportion of malicious engines.
     """
     if not vt or not vt.enabled or not vt.last_analysis_stats:
@@ -411,12 +411,39 @@ def compute_domain_risk(
     - Registrar reputation
     - Homograph / DGA-like domain appearance
     - VirusTotal detection ratio
-    into a 0–100 score.
+    into a 0-100 score.
     """
 
     domain = _extract_domain_string(whois, dns, urlscan)
 
     factors: List[DomainRiskFactor] = []
+
+    incomplete = 0
+
+    # WHOIS missing / disabled (you always build WHOISData, but it may be empty)
+    if whois is None or (getattr(whois, "enabled", True) is False):
+        incomplete += 12
+
+    # DNS failed
+    errors = getattr(dns, "errors", None) or {}
+    if not dns or (isinstance(errors, dict) and errors):
+        incomplete += 8
+
+    # URLScan missing/disabled
+    if not urlscan or not getattr(urlscan, "enabled", False):
+        incomplete += 8
+
+    # VT missing/disabled
+    if vt is None or not getattr(vt, "enabled", False):
+        incomplete += 8
+
+    if incomplete:
+        factors.append(DomainRiskFactor(
+            name="enrichment_incomplete",
+            weight=1.0,
+            value=min(incomplete, 30),
+            contribution=min(incomplete, 30),
+        ))
 
     # 1) Domain age
     age_val = _age_to_score(_safe_get(whois, "domain_age_days", None))

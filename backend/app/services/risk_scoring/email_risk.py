@@ -244,6 +244,14 @@ def compute_email_risk(
 
     for a in att_enr_list:
         enr = _safe_get(a, "enrichment")
+        
+        # if enrichment failed, treat as "inconclusive", not 0
+        if isinstance(enr, dict) and enr.get("failed") is True:
+            # set a baseline so the email isn't scored low due to missing intel
+            max_hash_risk = max(max_hash_risk, 45)
+            reasons.append("Attachment enrichment failed (provider unavailable); result is incomplete.")
+            continue
+        
         risk = _safe_get(enr, "risk")
         s = _safe_get(risk, "score")
         if s is not None:

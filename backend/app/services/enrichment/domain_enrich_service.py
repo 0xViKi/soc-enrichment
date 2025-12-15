@@ -15,6 +15,7 @@ from app.services.enrichment.core_service.whois_service import normalize_whois
 from app.services.enrichment.core_service.urlscan_service import search_urlscan_domain
 from app.services.enrichment.core_service.vt_service import fetch_vt_domain
 from app.services.risk_scoring.domain_risk import compute_domain_risk
+from app.services.enrichment.core_service.retry import async_retry
 
 logger = logging.getLogger(__name__)
 
@@ -63,14 +64,15 @@ async def enrich_domain_value(domain: str) -> DomainEnrichResponse:
       - /enrich/domain API route
       - internal event pipeline
     """
-    domain = domain.strip().lower()
+    domain: str = domain.strip().lower()
+    meta: dict[str, Any] = {"errors": {}}
 
     # ---- WHOIS ----
     whois_norm = _safe_normalize_whois(domain)
     whois = WHOISData(**whois_norm)
 
     # ---- DNS ----
-    dns_raw = await _safe_resolve_dns(domain)
+    dns_raw = await async_retry(lambda: resolve_dns_records(domain), attempts=2, base_delay=0.6)
     dns = DNSRecordData(
         enabled=True,
         a_records=dns_raw.get("a_records", []),
@@ -80,7 +82,7 @@ async def enrich_domain_value(domain: str) -> DomainEnrichResponse:
     )
 
     # ---- URLScan ----
-    urlscan_raw = await _safe_urlscan(domain)
+    urlscan_raw = await async_retry(lambda: search_urlscan_domain(domain), attempts=3, base_delay=0.8)
     findings: List[URLScanFinding] = []
     malicious_count = 0
 
@@ -114,7 +116,7 @@ async def enrich_domain_value(domain: str) -> DomainEnrichResponse:
     )
 
     # ---- VirusTotal (Domain) ----
-    vt_raw = await _safe_vt_domain(domain)
+    vt_raw =  await async_retry(lambda: fetch_vt_domain(domain), attempts=3, base_delay=0.8)
     if vt_raw:
         attr = vt_raw.get("attributes", {}) if isinstance(vt_raw, dict) else {}
         cats = attr.get("categories")

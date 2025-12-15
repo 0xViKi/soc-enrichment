@@ -1,4 +1,5 @@
 # backend/app/services/enrichment/ip_enrich_service.py
+from ipaddress import IPv4Address, IPv6Address, ip_address
 from typing import Optional, Any
 
 from app.schemas.enrich.ip_enrich import (
@@ -10,19 +11,52 @@ from app.services.enrichment.core_service.ipinfo_service import fetch_ipinfo
 from app.services.enrichment.core_service.dns_service import resolve_a_records
 from app.services.enrichment.core_service.vt_service import fetch_vt_ip
 from app.services.risk_scoring.ip_risk import compute_ip_risk
+from app.services.enrichment.core_service.retry import async_retry
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-async def enrich_ip_value(ip_str: str) -> IPEnrichResponse:
-    """Enrich a single IP string and return the full enrichment+ risk model."""
+async def enrich_ip_value(ip_str:  str | IPv4Address | IPv6Address) -> IPEnrichResponse:
+    """Enrich a single IP string and return the full enrichment + risk model."""
+    
+    ip_str: str = str(ip_str)
+    ip_obj = ip_address(ip_str)
+    meta: dict[str, Any] = {"errors": {}}
+
+    if (
+        ip_obj.is_private
+        or ip_obj.is_loopback
+        or ip_obj.is_link_local
+        or ip_obj.is_reserved
+        or ip_obj.is_multicast
+    ):
+        return IPEnrichResponse(
+            ioc_type="ip",
+            value=str(ip_obj),
+            abuseipdb=AbuseIPDBData(enabled=False),
+            ipinfo=IPInfoData(enabled=False),
+            dns=DNSData(enabled=False),
+            vt=VirusTotalIPData(enabled=False),
+            risk=compute_ip_risk(
+                abuse=AbuseIPDBData(enabled=False),
+                ipinfo=IPInfoData(enabled=False),
+                dns=DNSData(enabled=False),
+                vt=None,
+            ),
+            meta={
+                "scope": "internal",
+                "reason": "private_or_reserved_ip",
+            },
+        )
+
+    # ---- public IP enrichment continues below ----
 
     # ---- AbuseIPDB ----
     try:
-        abuse_raw = await fetch_abuseipdb(ip_str)
+        abuse_raw = await async_retry(lambda: fetch_abuseipdb(ip_str), attempts=3, base_delay=0.5)
     except Exception as e:
-        logger.warning("Abuse fetch failed: %s", e)
+        meta["errors"]["abuseipdb"] = f"{type(e).__name__}: {e}"
         abuse_raw = None
 
     abuse = (
@@ -38,9 +72,9 @@ async def enrich_ip_value(ip_str: str) -> IPEnrichResponse:
 
     # ---- IPInfo ----
     try:
-        ipinfo_raw = await fetch_ipinfo(ip_str)
+        ipinfo_raw = await async_retry(lambda: fetch_ipinfo(ip_str), attempts=3, base_delay=0.5)
     except Exception as e:
-        logger.warning("IPInfo fetch failed: %s", e)
+        meta["errors"]["ipinfo"] = f"{type(e).__name__}: {e}"
         ipinfo_raw = None
 
     ipinfo = (
@@ -59,9 +93,9 @@ async def enrich_ip_value(ip_str: str) -> IPEnrichResponse:
 
     # ---- DNS ----
     try:
-        a_records, dns_error = await resolve_a_records(ip_str)
+        a_records, dns_error = await async_retry(lambda: resolve_a_records(ip_str), attempts=2, base_delay=0.5)
     except Exception as e:
-        logger.warning("DNS resolve failed: %s", e)
+        meta["errors"]["dns"] = f"{type(e).__name__}: {e}"
         a_records, dns_error = [], str(e)
 
     dns = DNSData(
@@ -72,8 +106,9 @@ async def enrich_ip_value(ip_str: str) -> IPEnrichResponse:
 
     # ---- VirusTotal ----
     try:
-        vt_raw = await fetch_vt_ip(ip_str)
-    except Exception:
+        vt_raw = await async_retry(lambda: fetch_vt_ip(ip_str), attempts=3, base_delay=0.8)
+    except Exception as e:
+        meta["errors"]["virustotal"] = f"{type(e).__name__}: {e}"
         vt_raw = None
 
     if vt_raw:
@@ -115,7 +150,7 @@ async def enrich_ip_value(ip_str: str) -> IPEnrichResponse:
         dns=dns,
         vt=vt,
         risk=risk,
-        meta={},
+        meta=meta,
     )
 
 

@@ -209,6 +209,32 @@ def compute_hash_risk(vt: VTData) -> HashRiskScore:
 
     factors = []
 
+    # Provider failed / not available → INCONCLUSIVE, not LOW
+    if not vt or not getattr(vt, "enabled", False):
+        baseline = 45  # choose 30–55 depending on your SOC posture
+        factors.append(HashRiskFactor(
+            name="provider_unavailable",
+            weight=1.0,
+            value=baseline,
+            contribution=baseline,
+        ))
+        total = int(baseline)
+        severity = severity_from_score(total)
+        return HashRiskScore(score=total, severity=severity, factors=factors)
+
+    # (optional) also treat “enabled but missing stats” as inconclusive
+    if not getattr(vt, "last_analysis_stats", None):
+        baseline = 40
+        factors.append(HashRiskFactor(
+            name="provider_partial_data",
+            weight=1.0,
+            value=baseline,
+            contribution=baseline,
+        ))
+        total = int(baseline)
+        severity = severity_from_score(total)
+        return HashRiskScore(score=total, severity=severity, factors=factors)
+
     # -------------------------
     # 1. AV Detection Strength
     # -------------------------

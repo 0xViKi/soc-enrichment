@@ -12,7 +12,7 @@ from app.services.events.event_store_service import event_store_service
 
 class CorrelationEngine:
     """
-    Foundational correlation rules for Phase 4.
+    Foundational correlation rules.
 
     Implemented rule groups:
       1. Repeated IP activity (any event type).
@@ -36,7 +36,8 @@ class CorrelationEngine:
 
     # Thresholds for IP repetition
     REPEAT_IP_MEDIUM_THRESHOLD = 5
-    REPEAT_IP_HIGH_THRESHOLD = 15
+    REPEAT_IP_HIGH_THRESHOLD = 10
+    REPEAT_IP_CRITICAL_THRESHOLD = 15
 
     # Thresholds for brute force
     BRUTEFORCE_MEDIUM_THRESHOLD = 5
@@ -44,10 +45,11 @@ class CorrelationEngine:
     BRUTEFORCE_CRITICAL_THRESHOLD = 20
 
     # Thresholds for domain age (days)
+    NEW_DOMAIN_CRITICAL_DAYS = 3
     NEW_DOMAIN_HIGH_DAYS = 7
     NEW_DOMAIN_MEDIUM_DAYS = 30
 
-    # Threat intel thresholds (examples)
+    # Threat intel thresholds
     ABUSEIPDB_HIGH_SCORE = 75
     ABUSEIPDB_MEDIUM_SCORE = 50
 
@@ -63,7 +65,7 @@ class CorrelationEngine:
 
         Uses event store + basic rules to produce:
           - findings (list of CorrelationFinding)
-          - risk_score (0–100)
+          - risk_score (0-100)
           - risk_level (low/medium/high/critical)
         """
         try:
@@ -146,7 +148,9 @@ class CorrelationEngine:
             if count <= 1:
                 continue
 
-            if count >= self.REPEAT_IP_HIGH_THRESHOLD:
+            if count >= self.REPEAT_IP_CRITICAL_THRESHOLD:
+                severity = "critical"
+            elif count >= self.REPEAT_IP_MEDIUM_THRESHOLD:
                 severity = "high"
             elif count >= self.REPEAT_IP_MEDIUM_THRESHOLD:
                 severity = "medium"
@@ -275,7 +279,9 @@ class CorrelationEngine:
             except Exception:
                 continue
 
-            if age_days <= self.NEW_DOMAIN_HIGH_DAYS:
+            if age_days <= self.NEW_DOMAIN_CRITICAL_DAYS:
+                severity = "critical"
+            elif age_days <= self.NEW_DOMAIN_HIGH_DAYS:
                 severity = "high"
             elif age_days <= self.NEW_DOMAIN_MEDIUM_DAYS:
                 severity = "medium"
@@ -305,7 +311,9 @@ class CorrelationEngine:
                 sender_age = None
 
         if sender_domain and sender_age is not None:
-            if sender_age <= self.NEW_DOMAIN_HIGH_DAYS:
+            if sender_age <= self.NEW_DOMAIN_CRITICAL_DAYS:
+                severity = "critical"
+            elif sender_age <= self.NEW_DOMAIN_HIGH_DAYS:
                 severity = "high"
             elif sender_age <= self.NEW_DOMAIN_MEDIUM_DAYS:
                 severity = "medium"
@@ -582,7 +590,9 @@ class CorrelationEngine:
             )
 
             # If domain is extremely new, escalate aggressively
-            if sender_age <= self.NEW_DOMAIN_HIGH_DAYS or has_email_high:
+            if sender_age <= self.NEW_DOMAIN_CRITICAL_DAYS or has_email_high:
+                combo_sev = "critical"
+            elif sender_age <= self.NEW_DOMAIN_HIGH_DAYS or has_email_high:
                 combo_sev = "high"
             else:
                 combo_sev = "medium"

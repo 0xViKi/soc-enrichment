@@ -1,6 +1,7 @@
 from typing import Any, Dict, List
 import asyncio
 from ipaddress import ip_address
+import logging, json
 
 import httpx
 
@@ -18,6 +19,7 @@ from app.schemas.enrich.email_enrich import (
 # You can make this configurable via settings if you like
 _INTERNAL_ENRICH_CONCURRENCY = getattr(settings, "INTERNAL_ENRICH_CONCURRENCY", 5)
 _SEM = asyncio.Semaphore(_INTERNAL_ENRICH_CONCURRENCY)
+logger = logging.getLogger("email_enrich_debug")
 
 
 def is_valid_ip(value: str) -> bool:
@@ -141,7 +143,7 @@ async def enrich_email_iocs(iocs: EmailIOCBundle) -> EmailEnrichmentBundle:
 
     async with httpx.AsyncClient(
         base_url=base,
-        timeout=httpx.Timeout(20.0, connect=10.0),
+        timeout=httpx.Timeout(45.0, connect=10.0),
     ) as client:
         tasks: Dict[str, asyncio.Task] = {}
 
@@ -166,6 +168,12 @@ async def enrich_email_iocs(iocs: EmailIOCBundle) -> EmailEnrichmentBundle:
                 )
             )
 
+        # Logging/Debug 
+        # logger.warning("EMAIL_ENRICH DEBUG: extracted attachment_hashes=%s",
+        #        [h.model_dump() for h in iocs.attachment_hashes])
+        # logger.warning("EMAIL_ENRICH DEBUG: unique chosen hashes=%s", sorted(unique_hashes))
+        # logger.warning("EMAIL_ENRICH DEBUG: INTERNAL_API_BASE_URL=%s", base)
+        
         # Domain enrichment
         for d in sorted(domain_set):
             key = f"domain:{d}"
@@ -201,6 +209,29 @@ async def enrich_email_iocs(iocs: EmailIOCBundle) -> EmailEnrichmentBundle:
                     }
                 else:
                     results[key] = res
+
+        # Logging/Debug purpose
+        # for k, v in results.items():
+        #     if k.startswith("hash:"):
+        #         if v is None:
+        #             logger.error("EMAIL_ENRICH DEBUG: %s -> None", k)
+        #         else:
+        #             logger.warning("EMAIL_ENRICH DEBUG: %s -> keys=%s", k, list(v.keys()))
+        #             # show nested shape safely
+        #             try:
+        #                 logger.warning("EMAIL_ENRICH DEBUG: %s -> vt=%s risk=%s",
+        #                             k, "present" if (isinstance(v, dict) and v.get("vt")) else "missing",
+        #                             "present" if (isinstance(v, dict) and v.get("risk")) else "missing")
+        #             except Exception as e:
+        #                 logger.exception("EMAIL_ENRICH DEBUG: failed inspecting %s: %s", k, e)
+
+        #             # print first 600 chars (so logs don't explode)
+        #             try:
+        #                 logger.warning("EMAIL_ENRICH DEBUG: %s -> body_snippet=%s",
+        #                             k, json.dumps(v)[:600])
+        #             except Exception:
+        #                 logger.warning("EMAIL_ENRICH DEBUG: %s -> non-json-printable", k)
+
 
     # --- Map results back ---
 

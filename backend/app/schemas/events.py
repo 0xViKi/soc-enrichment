@@ -12,9 +12,9 @@ class EventSource(str, Enum):
     WAZUH = "wazuh"
     AZURE_SENTINEL = "azure_sentinel"
     SPLUNK = "splunk"
-    CUSTOM = "custom"
-    MANUAL = "manual"
     EMAIL_GATEWAY = "email_gateway" 
+    MANUAL = "manual"
+    CUSTOM = "custom"
 
 
 class EventSeverity(str, Enum):

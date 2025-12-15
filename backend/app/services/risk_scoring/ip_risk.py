@@ -210,6 +210,29 @@ def compute_ip_risk(
 
     factors = []
 
+    provider_penalty = 0
+
+    # If provider modules are disabled/missing, don't assume clean
+    if not abuse or not getattr(abuse, "enabled", False):
+        provider_penalty += 12
+
+    if not ipinfo or not getattr(ipinfo, "enabled", False):
+        provider_penalty += 10
+
+    if not dns or not getattr(dns, "enabled", False) or getattr(dns, "error", None):
+        provider_penalty += 8
+
+    if vt is None or not getattr(vt, "enabled", False):
+        provider_penalty += 8
+
+    if provider_penalty:
+        factors.append(IPRiskFactor(
+            name="enrichment_incomplete",
+            weight=1.0,
+            value=min(provider_penalty, 30),
+            contribution=min(provider_penalty, 30),
+        ))
+
     # 1) Abuse Confidence Score
     abuse_score = float(abuse.score or 0)
     factors.append(IPRiskFactor(

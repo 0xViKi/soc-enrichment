@@ -9,17 +9,19 @@ from app.schemas.enrich.hash_enrich import (
 )
 from app.services.enrichment.core_service.vt_service import fetch_vt_file
 from app.services.risk_scoring.hash_risk import compute_hash_risk
+from app.services.enrichment.core_service.retry import async_retry
 
 logger = logging.getLogger(__name__)
 
 
-async def _safe_fetch_vt(hash_value: str) -> Optional[dict]:
+async def _safe_fetch_vt(hash_value: str) -> tuple[Optional[dict], Optional[str]]:
     try:
-        return await fetch_vt_file(hash_value)
+        vt = await async_retry(lambda: fetch_vt_file(hash_value), attempts=3, base_delay=0.8)
+        return vt, None
     except Exception as e:
-        logger.warning("VT file lookup failed for %s: %s", hash_value, e)
-        return None
-
+        msg = f"{type(e).__name__}: {e}"
+        logger.warning("VT file lookup failed for %s: %s", hash_value, msg)
+        return None, msg
 
 async def enrich_hash_value(hash_value: str) -> HashEnrichResponse:
     """
@@ -27,7 +29,7 @@ async def enrich_hash_value(hash_value: str) -> HashEnrichResponse:
     """
     hash_value = hash_value.strip().lower()
 
-    vt_raw = await _safe_fetch_vt(hash_value)
+    vt_raw, vt_err = await _safe_fetch_vt(hash_value)
     if vt_raw:
         attr = vt_raw.get("attributes", {}) or {}
 
@@ -79,8 +81,11 @@ async def enrich_hash_value(hash_value: str) -> HashEnrichResponse:
     risk = compute_hash_risk(vt=vt_data)
 
     meta: dict[str, Any] = {
-        # case_id can be injected by route
+        "errors": {}
     }
+
+    if vt_err:
+        meta["errors"]["virustotal"] = vt_err
 
     return HashEnrichResponse(
         ioc_type="hash",
