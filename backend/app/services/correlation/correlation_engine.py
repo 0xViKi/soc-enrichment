@@ -150,7 +150,7 @@ class CorrelationEngine:
 
             if count >= self.REPEAT_IP_CRITICAL_THRESHOLD:
                 severity = "critical"
-            elif count >= self.REPEAT_IP_MEDIUM_THRESHOLD:
+            elif count >= self.REPEAT_IP_HIGH_THRESHOLD:
                 severity = "high"
             elif count >= self.REPEAT_IP_MEDIUM_THRESHOLD:
                 severity = "medium"
@@ -382,7 +382,8 @@ class CorrelationEngine:
         hash_ti = ti.get("hashes") or {}
 
         # IP threat intel
-        for ip in iocs.get("src_ips") or []:
+        ips_to_check = set((iocs.get("src_ips") or []) + (iocs.get("dst_ips") or []))
+        for ip in ips_to_check:
             ctx = ip_ti.get(ip) or {}
             vt_bad = bool(ctx.get("vt_malicious"))
             abuse_score = ctx.get("abuseipdb_score")
