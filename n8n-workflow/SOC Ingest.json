@@ -1,0 +1,90 @@
+{
+  "name": "SOC Ingest",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "soc-ingest",
+        "options": {
+          "responseData": "{\"status\":\"ok\"}"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -224,
+        -80
+      ],
+      "id": "72f7d276-9634-413a-8656-874b7f8c29ec",
+      "name": "Webhook (SOC Ingest)",
+      "webhookId": "faac2123-ea03-4197-80c9-b8956f5c03d4"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "function toArray(v) {\n  if (!v) return [];\n  if (Array.isArray(v)) return v.filter(Boolean);\n  return [v].filter(Boolean);\n}\n\nfunction uniq(arr) {\n  return [...new Set((arr || []).filter(Boolean))];\n}\n\nfunction normalizeSeverity(input) {\n  if (!input) return \"low\";\n  const s = String(input).toLowerCase();\n  if ([\"critical\", \"sev0\", \"sev1\"].includes(s)) return \"critical\";\n  if ([\"high\", \"sev2\"].includes(s)) return \"high\";\n  if ([\"medium\", \"med\", \"sev3\"].includes(s)) return \"medium\";\n  if ([\"low\", \"info\", \"informational\", \"sev4\", \"sev5\"].includes(s)) return \"low\";\n\n  // numeric-ish fallback\n  const n = Number(input);\n  if (!Number.isNaN(n)) {\n    if (n >= 10) return \"critical\";\n    if (n >= 7) return \"high\";\n    if (n >= 3) return \"medium\";\n    return \"low\";\n  }\n\n  return \"low\";\n}\n\nfunction extractIOCsFromGeneric(obj) {\n  // Very defensive + minimal: only pull obvious fields if present\n  const src_ips = [];\n  const dst_ips = [];\n  const domains = [];\n  const urls = [];\n  const hashes = [];\n  const emails = [];\n  const message_ids = [];\n\n  const maybePush = (arr, v) => { toArray(v).forEach(x => arr.push(x)); };\n\n  // common keys\n  maybePush(src_ips, obj?.src_ip);\n  maybePush(src_ips, obj?.srcip);\n  maybePush(src_ips, obj?.source_ip);\n  maybePush(dst_ips, obj?.dst_ip);\n  maybePush(dst_ips, obj?.dstip);\n  maybePush(dst_ips, obj?.destination_ip);\n\n  maybePush(domains, obj?.domain);\n  maybePush(domains, obj?.domains);\n  maybePush(urls, obj?.url);\n  maybePush(urls, obj?.urls);\n\n  maybePush(hashes, obj?.hash);\n  maybePush(hashes, obj?.hashes);\n  maybePush(hashes, obj?.sha256);\n  maybePush(hashes, obj?.md5);\n\n  maybePush(emails, obj?.email);\n  maybePush(emails, obj?.email_addresses);\n  maybePush(message_ids, obj?.message_id);\n  maybePush(message_ids, obj?.message_ids);\n\n  // nested iocs\n  if (obj?.iocs) {\n    maybePush(src_ips, obj.iocs.src_ips);\n    maybePush(dst_ips, obj.iocs.dst_ips);\n    maybePush(domains, obj.iocs.domains);\n    maybePush(urls, obj.iocs.urls);\n    maybePush(hashes, obj.iocs.hashes);\n    maybePush(emails, obj.iocs.email_addresses);\n    maybePush(message_ids, obj.iocs.message_ids);\n  }\n\n  return {\n    src_ips: uniq(src_ips),\n    dst_ips: uniq(dst_ips),\n    domains: uniq(domains),\n    urls: uniq(urls),\n    hashes: uniq(hashes),\n    email_addresses: uniq(emails),\n    message_ids: uniq(message_ids)\n  };\n}\n\nfunction detectSource(headers, body) {\n  const h = headers || {};\n  const b = body || {};\n\n  const allowed = new Set([\n    \"wazuh\",\n    \"azure_sentinel\",\n    \"splunk\",\n    \"email_gateway\",\n    \"manual\",\n    \"custom\",\n  ]);\n\n  // 1) explicit body.source ONLY if it's one of our known sources\n  if (b?.source && allowed.has(String(b.source))) return String(b.source);\n\n  // 2) explicit header override (highest priority)\n  const hdr = h[\"x-soc-source\"] || h[\"X-SOC-SOURCE\"] || h[\"x-soc_source\"];\n  if (hdr && allowed.has(String(hdr))) return String(hdr);\n\n  // 3) Splunk HEC hint\n  const auth = (h.authorization || h.Authorization || \"\").toString();\n  if (auth.toLowerCase().includes(\"splunk\")) return \"splunk\";\n\n  // 4) Azure Sentinel hints\n  if (b?.data?.alertContext || b?.essentials || b?.alertContext) return \"azure_sentinel\";\n\n  return \"custom\";\n}\n\nfunction mapWazuh(body) {\n  const raw = body;\n  const level = raw.rule?.level ?? 1;\n  const severity = normalizeSeverity(level);\n  const src_ip = raw.data?.srcip || raw.data?.src_ip || null;\n\n  return {\n    source: raw.source || \"wazuh\",\n    severity,\n    vendor: raw.vendor || \"wazuh\",\n    product: raw.product || \"wazuh-manager\",\n    event_type: raw.event_type || raw.rule?.id || \"auth_failure\",\n    occurred_at: raw.timestamp || raw.data?.timestamp || null,\n    description: raw.description || raw.rule?.description || \"Wazuh alert\",\n    iocs: raw.iocs ?? {\n      src_ips: src_ip ? [src_ip] : [],\n      dst_ips: [],\n      domains: [],\n      urls: [],\n      hashes: [],\n      email_addresses: [],\n      message_ids: []\n    },\n    raw_event: raw\n  };\n}\n\nfunction mapSplunkHEC(body, headers) {\n  // Typical HEC payload:\n  // { \"time\": 1712345678, \"host\": \"...\", \"source\": \"...\", \"sourcetype\": \"...\", \"event\": {...} }\n  const raw = body;\n  const ev = raw.event ?? raw;\n\n  const occurred_at = raw.time\n    ? new Date(Number(raw.time) * 1000).toISOString()\n    : (ev.timestamp || ev.occurred_at || null);\n\n  const severity = normalizeSeverity(ev.severity || ev.level || raw.severity);\n\n  // IOC extraction tries event first\n  const iocs = extractIOCsFromGeneric(ev);\n\n  return {\n    source: \"splunk\",\n    severity,\n    vendor: ev.vendor || \"splunk\",\n    product: ev.product || (raw.sourcetype ? `splunk:${raw.sourcetype}` : \"splunk\"),\n    event_type: ev.event_type || ev.signature || ev.rule_name || raw.source || \"splunk_event\",\n    occurred_at,\n    description: ev.description || ev.message || ev._raw || \"Splunk event\",\n    iocs,\n    raw_event: raw\n  };\n}\n\nfunction mapAzureSentinel(body) {\n  // Azure Sentinel often arrives in different shapes depending on connector.\n  // We'll support two common patterns:\n  // 1) Alert schema with essentials + alertContext\n  // 2) Generic object containing data.alertContext\n\n  const raw = body;\n  const essentials = raw.essentials || raw.data?.essentials || null;\n  const ctx = raw.alertContext || raw.data?.alertContext || null;\n\n  const title = essentials?.alertDisplayName || essentials?.title || raw.title;\n  const desc = essentials?.description || raw.description || title || \"Azure Sentinel alert\";\n\n  const occurred_at = essentials?.startTimeUtc || essentials?.createdTimeUtc || raw.timeGenerated || raw.timestamp || null;\n\n  const severity = normalizeSeverity(essentials?.severity || raw.severity || raw.level);\n\n  // IOC extraction: try alertContext first, then full body\n  const iocs = extractIOCsFromGeneric(ctx || raw);\n\n  return {\n    source: \"azure_sentinel\",\n    severity,\n    vendor: \"microsoft\",\n    product: \"azure-sentinel\",\n    event_type: essentials?.alertType || essentials?.alertRule || raw.event_type || \"sentinel_alert\",\n    occurred_at,\n    description: desc,\n    iocs,\n    raw_event: raw\n  };\n}\n\nfunction mapManualOrCustom(body, forcedSource) {\n  const raw = body;\n  const source = forcedSource || raw.source || \"custom\";\n\n  // If the user already sends normalized format, pass-through with light defaults.\n  const alreadyNormalized = raw && raw.iocs && raw.severity && raw.event_type;\n  if (alreadyNormalized) {\n    return {\n      source: raw.source || source,\n      severity: normalizeSeverity(raw.severity),\n      vendor: raw.vendor || source,\n      product: raw.product || source,\n      event_type: raw.event_type || \"custom_event\",\n      occurred_at: raw.occurred_at || raw.timestamp || null,\n      description: raw.description || \"Custom event\",\n      iocs: raw.iocs,\n      raw_event: raw.raw_event || raw\n    };\n  }\n\n  // Otherwise: build from whatever we got\n  const severity = normalizeSeverity(raw.severity || raw.level);\n  const iocs = extractIOCsFromGeneric(raw);\n\n  return {\n    source,\n    severity,\n    vendor: raw.vendor || source,\n    product: raw.product || source,\n    event_type: raw.event_type || raw.type || \"custom_event\",\n    occurred_at: raw.occurred_at || raw.timestamp || null,\n    description: raw.description || raw.message || \"Custom event\",\n    iocs,\n    raw_event: raw\n  };\n}\n\n// ----------------------------\n// Main\n// ----------------------------\nconst headers = $json.headers || {};\nconst body = $json.body || {};\n\nconst detected = detectSource(headers, body);\n\nlet normalized;\nswitch (detected) {\n  case \"wazuh\":\n    normalized = mapWazuh(body);\n    break;\n  case \"splunk\":\n    normalized = mapSplunkHEC(body, headers);\n    break;\n  case \"azure_sentinel\":\n    normalized = mapAzureSentinel(body);\n    break;\n  case \"manual\":\n  case \"custom\":\n  default:\n    normalized = mapManualOrCustom(body, detected);\n    break;\n}\n\n// ensure IOC arrays exist\nnormalized.iocs = normalized.iocs || {\n  src_ips: [],\n  dst_ips: [],\n  domains: [],\n  urls: [],\n  hashes: [],\n  email_addresses: [],\n  message_ids: []\n};\n\nreturn { json: normalized };\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16,
+        -80
+      ],
+      "id": "38b775c6-a3a2-4b2a-ae0d-d1a77002c49b",
+      "name": "Normalize (Multi-Source)"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://backend:8000/api/v1/events/ingest",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$json}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        288,
+        -80
+      ],
+      "id": "6c889923-d610-4509-8248-4b82a53376cf",
+      "name": "POST → Backend /events/ingest"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook (SOC Ingest)": {
+      "main": [
+        [
+          {
+            "node": "Normalize (Multi-Source)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize (Multi-Source)": {
+      "main": [
+        [
+          {
+            "node": "POST → Backend /events/ingest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "8faa7e9b-49fa-4a83-9654-041e23e8d446",
+  "meta": {
+    "instanceId": "1ab75e550af6a2eea5f80d716725de3474d7dce37ab4aa8a6d0f551fc3c49008"
+  },
+  "id": "o6rlR3mbf4aPbeGy",
+  "tags": []
+}
