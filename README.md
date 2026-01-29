@@ -51,6 +51,12 @@ A minimal web UI designed for rapid analyst workflows:
 
 ---
 
+## Example Screenshots and HTML reports available in assets directory
+<img src="assets/Report_1-BadRabbit.png" />
+<img src="assets/Report_2-IP_IoC.png" />
+<img src="assets/Report_3-Generic_mail.png" />
+--
+
 ## Scope Boundaries
 **This is not** a SIEM, SOAR, or incident management platform. The goal is a focused enrichment + triage layer that complements existing tooling.
 
